@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- Reworked launcher startup so feature activity classes are loaded only when opened.
+- Replaced software-rendered animated card borders with hardware-safe static gradient borders.
+- Deferred immersive-mode changes until the window view is attached.
+- Added a recovery launcher instead of allowing startup rendering failures to terminate the app.
+
 ## 0.3.0
 
 - Replaced the link-only Asset Vault with direct official asset downloading.
