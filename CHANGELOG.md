@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1
+
+- Reworked launcher startup so feature activity classes are loaded only when opened.
+- Replaced the software-rendered card animation with a hardware-safe animated OreUI border renderer.
+- Deferred immersive-mode changes until the window view is attached.
+- Added a recovery launcher instead of allowing startup rendering failures to terminate the app.
+- Preserved the AMOLED OreUI-inspired cards, compact controls, red-purple accents, and animated outlines.
+
 ## 0.3.0
 
 - Replaced the link-only Asset Vault with direct official asset downloading.
