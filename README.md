@@ -1,45 +1,48 @@
 # NullForge Studio
 
-NullForge Studio is an Android-first Minecraft pack workspace built specifically for creating, inspecting, assembling, validating, and exporting Minecraft content.
+NullForge Studio is a native Android-first Minecraft creator workspace.
 
-The interface is inspired by Minecraft's modern OreUI visual language, rebuilt as an original red, purple, black, and split-light theme based on Alastor Kaneki. It does not bundle or redistribute Mojang asset archives inside the APK. Official assets are fetched directly to the user's device and cached for offline use.
+The interface uses an original AMOLED OreUI-inspired layout with red, purple, black, and split-light accents based on Alastor Kaneki. The application does not use WebViews for its tweak selectors.
 
-## Current features
+## Native Tweaks Library
 
-### Separate edition workspaces
+The app includes three independent native provider tabs:
 
-- Bedrock Edition projects and caches are isolated from Java Edition projects and caches.
-- Bedrock project types: resource pack, behavior pack, paired add-on, skin pack, and world template.
-- Java project types: resource pack, data pack, and combined resource/data workspace.
+### Vanilla Tweaks
 
-### Complete official asset vault
+- Reads the official `VanillaTweaks/packs` GitHub repository.
+- Lists the data-pack source folders that are publicly available there.
+- Exports selected source bundles with the required upstream-build warning.
+- Keeps Vanilla Tweaks credits and links separate from the other providers.
 
-- Bedrock uses the official `Mojang/bedrock-samples` GitHub releases API.
-- Stable and Preview channels are selectable independently.
-- The app locates the complete release asset dynamically instead of hardcoding a release URL.
-- The archive is cached and safely extracted into a versioned offline vault.
-- Every file and folder in the extracted release can be browsed, previewed, selected, and copied into a project.
-- Java uses Mojang's official version manifest, client metadata, client JAR, asset index, and asset object service.
-- Java client `assets/` and `data/` trees are extracted, and every object referenced by the official asset index is downloaded into its correct path.
+The public repository states that it contains source for some packs and uses Python, Poetry, and Beet for builds. It is not a complete mirror of the Vanilla Tweaks website catalog.
 
-### Pack workspace
+### Bedrock Tweaks
 
-- Full project file browser.
-- JSON, MCMeta, Lang, JavaScript, TypeScript, shader, and function text editor.
-- PNG, JPEG, and WebP preview.
-- File import, rename, deletion, and project-relative path handling.
-- Templates for blocks, items, entities, recipes, loot tables, functions, animations, animation controllers, particles, render controllers, UI files, scripts, Java models, blockstates, advancements, tags, predicates, and more.
-- Bedrock manifest generation with fresh UUIDs.
-- Paired add-on dependency generation.
-- Java `pack.mcmeta` generation with configurable pack format.
-- JSON and manifest validation.
-- Export to `.mcpack`, `.mcaddon`, or `.zip` through Android's Storage Access Framework.
+- Reads structured catalogs from `BedrockTweaks/Files` on the `devel` branch.
+- Supports Resource Packs, Addons, and Crafting Tweaks.
+- Reads categories, names, descriptions, and conflict metadata natively.
+- Resolves selected source folders through the GitHub tree API.
+- Assembles selected files on-device into `.mcpack` or `.mcaddon` output.
 
-### Offline behavior
+### BEComTweaks
 
-- Each downloaded version is stored as its own snapshot.
-- Previously cached snapshots remain selectable without a network connection.
-- Bedrock Stable, Bedrock Preview, and Java caches remain independent.
+- Reads the separate `resource-packs`, `behaviour-packs`, and `crafting-tweaks` repositories.
+- Loads each repository's native JSON pack metadata.
+- Supports search, categories, selection persistence, and conflict warnings.
+- Assembles selected source files on-device.
+- Preserves separate BEComTweaks and original-project attribution.
+
+## Additional workspace features
+
+- Bedrock and Java project creation.
+- Fresh Bedrock manifest UUID generation.
+- Java `pack.mcmeta` generation.
+- Local app-private project storage.
+- Official Mojang Bedrock sample and Java asset-source destinations.
+- Android Storage Access Framework exports.
+- Immersive AMOLED interface.
+- Animated rainbow card outlines.
 
 ## Build
 
@@ -51,13 +54,19 @@ gradle :app:assembleDebug
 
 GitHub Actions builds the debug APK and publishes it as the `NullForge-Studio-debug` workflow artifact.
 
-## Asset sources
+## Upstream projects
 
-- Bedrock samples and vanilla asset releases: `https://github.com/Mojang/bedrock-samples`
-- Minecraft Creator documentation: `https://learn.microsoft.com/minecraft/creator/`
+- Vanilla Tweaks: `https://vanillatweaks.net`
+- Vanilla Tweaks source: `https://github.com/VanillaTweaks/packs`
+- Bedrock Tweaks: `https://www.bedrocktweaks.net`
+- Bedrock Tweaks GitHub: `https://github.com/BedrockTweaks`
+- BEComTweaks: `https://becomtweaks.github.io`
+- BEComTweaks GitHub: `https://github.com/BEComTweaks`
+- Mojang Bedrock samples: `https://github.com/Mojang/bedrock-samples`
 - Java version manifest: `https://piston-meta.mojang.com/mc/game/version_manifest_v2.json`
-- Java asset objects: `https://resources.download.minecraft.net/`
 
-## Legal
+## Attribution
 
-NullForge Studio is an independent creator tool and is not an official Minecraft product. It is not approved by or associated with Mojang or Microsoft. Minecraft assets remain subject to Mojang and Microsoft terms. The application downloads official assets directly to the user's device and does not commit those assets to this repository.
+NullForge Studio is unofficial and is not affiliated with Mojang, Microsoft, Vanilla Tweaks, Bedrock Tweaks, or BEComTweaks.
+
+Minecraft belongs to Mojang Studios and Microsoft. Every upstream project and individual pack creator retains ownership of their work. NullForge Studio does not remove, replace, or claim upstream attribution.
