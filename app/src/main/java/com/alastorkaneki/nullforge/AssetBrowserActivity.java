@@ -3,7 +3,6 @@ package com.alastorkaneki.nullforge;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.graphics.BitmapFactory;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -77,7 +76,7 @@ public final class AssetBrowserActivity extends Activity {
     private View screen() {
         LinearLayout rootLayout = new LinearLayout(this);
         rootLayout.setOrientation(LinearLayout.VERTICAL);
-        rootLayout.setBackgroundColor(Ui.BLACK);
+        rootLayout.setBackground(Ui.screenBackground());
         rootLayout.setPadding(Ui.dp(this, 16), Ui.dp(this, 20), Ui.dp(this, 16), Ui.dp(this, 12));
 
         LinearLayout header = Ui.row(this);
@@ -86,6 +85,7 @@ public final class AssetBrowserActivity extends Activity {
         header.addView(back, new LinearLayout.LayoutParams(Ui.dp(this, 52), Ui.dp(this, 48)));
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
+        titles.addView(Ui.eyebrow(this, edition + " Assets"));
         titles.addView(Ui.title(this, label == null ? "Asset Browser" : label, 24));
         path = Ui.body(this, "/");
         titles.addView(path);
@@ -94,13 +94,7 @@ public final class AssetBrowserActivity extends Activity {
         header.addView(titles, titleParams);
         rootLayout.addView(header, Ui.matchWrap(this, 12));
 
-        search = new EditText(this);
-        search.setSingleLine(true);
-        search.setHint("Filter this folder");
-        search.setHintTextColor(Color.rgb(120, 116, 132));
-        search.setTextColor(Ui.TEXT);
-        search.setPadding(Ui.dp(this, 14), 0, Ui.dp(this, 14), 0);
-        search.setBackground(Ui.outlined(Ui.PANEL, Ui.PURPLE, 14, this));
+        search = Ui.input(this, "Filter this folder");
         search.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence value, int start, int count, int after) {
@@ -118,7 +112,7 @@ public final class AssetBrowserActivity extends Activity {
         rootLayout.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 50)));
 
         LinearLayout actions = Ui.row(this);
-        Button selectFolder = Ui.button(this, "Select folder");
+        Button selectFolder = Ui.primaryButton(this, "Select folder");
         selectFolder.setOnClickListener(view -> toggleSelection(relative(current)));
         actions.addView(selectFolder, new LinearLayout.LayoutParams(0, Ui.dp(this, 48), 1));
         Button clear = Ui.button(this, "Clear");
@@ -132,6 +126,7 @@ public final class AssetBrowserActivity extends Activity {
         rootLayout.addView(actions, Ui.matchWrap(this, 10));
 
         ScrollView scroll = new ScrollView(this);
+        scroll.setClipToPadding(false);
         list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 12));
@@ -139,11 +134,13 @@ public final class AssetBrowserActivity extends Activity {
         rootLayout.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         LinearLayout footer = Ui.row(this);
+        footer.setPadding(Ui.dp(this, 12), Ui.dp(this, 10), Ui.dp(this, 12), Ui.dp(this, 10));
+        footer.setBackground(Ui.outlined(Ui.PANEL, Ui.BORDER, 8, this));
         count = Ui.title(this, "0 selected", 15);
         footer.addView(count, Ui.weight(1));
-        Button importButton = Ui.button(this, "Add to project");
+        Button importButton = Ui.primaryButton(this, "Add to project");
         importButton.setOnClickListener(view -> chooseProject());
-        footer.addView(importButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 52)));
+        footer.addView(importButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 50)));
         rootLayout.addView(footer);
         return rootLayout;
     }
@@ -189,10 +186,8 @@ public final class AssetBrowserActivity extends Activity {
 
         LinearLayout details = new LinearLayout(this);
         details.setOrientation(LinearLayout.VERTICAL);
-        TextView name = Ui.title(this, (file.isDirectory() ? "▸ " : "") + file.getName(), 16);
-        details.addView(name);
-        TextView metadata = Ui.body(this, file.isDirectory() ? childSummary(file) : formatSize(file.length()));
-        details.addView(metadata);
+        details.addView(Ui.title(this, (file.isDirectory() ? "▸ " : "") + file.getName(), 16));
+        details.addView(Ui.body(this, file.isDirectory() ? childSummary(file) : formatSize(file.length())));
         content.addView(details, Ui.weight(1));
 
         Button open = Ui.button(this, file.isDirectory() ? "Open" : "View");
@@ -206,7 +201,7 @@ public final class AssetBrowserActivity extends Activity {
             }
         });
         content.addView(open, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 46)));
-        return Ui.card(this, content);
+        return Ui.listCard(this, content);
     }
 
     private void toggleSelection(String relative) {
@@ -298,6 +293,7 @@ public final class AssetBrowserActivity extends Activity {
                 text.setTypeface(android.graphics.Typeface.MONOSPACE);
                 text.setTextIsSelectable(true);
                 text.setPadding(Ui.dp(this, 14), Ui.dp(this, 14), Ui.dp(this, 14), Ui.dp(this, 14));
+                text.setBackgroundColor(Ui.PANEL);
                 ScrollView scroll = new ScrollView(this);
                 scroll.addView(text);
                 new AlertDialog.Builder(this).setTitle(file.getName()).setView(scroll).setPositiveButton("Close", null).show();
