@@ -1,12 +1,32 @@
 <resources>
     <style name="Theme.NullForge" parent="android:style/Theme.Material.NoActionBar">
-        <item name="android:fontFamily">sans</item>
+        <item name="android:fontFamily">sans-serif</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowNoTitle">true</item>
-        <item name="android:colorAccent">#B65CFF</item>
-        <item name="android:navigationBarColor">#050507</item>
-        <item name="android:statusBarColor">#050507</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowBackground">#050508</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:colorAccent">#B14EFF</item>
+        <item name="android:colorControlNormal">#B5B1BF</item>
+        <item name="android:colorControlActivated">#B14EFF</item>
+        <item name="android:colorControlHighlight">#33B14EFF</item>
+        <item name="android:textColorPrimary">#F7F6FA</item>
+        <item name="android:textColorSecondary">#B5B1BF</item>
+        <item name="android:navigationBarColor">#050508</item>
+        <item name="android:statusBarColor">#050508</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:alertDialogTheme">@style/Theme.NullForge.Dialog</item>
+    </style>
+
+    <style name="Theme.NullForge.Dialog" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowBackground">#111117</item>
+        <item name="android:colorAccent">#B14EFF</item>
+        <item name="android:colorControlNormal">#B5B1BF</item>
+        <item name="android:colorControlActivated">#B14EFF</item>
+        <item name="android:textColorPrimary">#F7F6FA</item>
+        <item name="android:textColorSecondary">#B5B1BF</item>
     </style>
 </resources>
