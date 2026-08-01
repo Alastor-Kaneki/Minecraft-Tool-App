@@ -16,7 +16,6 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -175,6 +174,16 @@ public final class Ui {
         return drawable;
     }
 
+    public static GradientDrawable accentPanel(Context context) {
+        GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.rgb(36, 12, 25), Color.rgb(19, 17, 27), Color.rgb(31, 14, 44)}
+        );
+        drawable.setCornerRadius(dp(context, 10));
+        drawable.setStroke(dp(context, 1), Color.rgb(107, 65, 127));
+        return drawable;
+    }
+
     private static StateListDrawable buttonBackground(Context context, int normal, int pressed, int stroke) {
         StateListDrawable states = new StateListDrawable();
         states.addState(new int[]{android.R.attr.state_pressed}, outlined(pressed, Color.WHITE, 7, context));
@@ -184,9 +193,12 @@ public final class Ui {
         return states;
     }
 
-    public static RainbowBorderLayout card(Context context, View content) {
-        RainbowBorderLayout outer = new RainbowBorderLayout(context);
+    public static LinearLayout card(Context context, View content) {
+        LinearLayout outer = new LinearLayout(context);
+        outer.setOrientation(LinearLayout.VERTICAL);
         outer.setPadding(dp(context, 2), dp(context, 2), dp(context, 2), dp(context, 2));
+        outer.setBackground(accentPanel(context));
+
         LinearLayout.LayoutParams outerParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -197,9 +209,9 @@ public final class Ui {
         LinearLayout inner = new LinearLayout(context);
         inner.setOrientation(LinearLayout.VERTICAL);
         inner.setPadding(dp(context, 18), dp(context, 16), dp(context, 18), dp(context, 16));
-        inner.setBackground(roundRect(PANEL, 11, context));
+        inner.setBackground(roundRect(PANEL, 9, context));
         inner.addView(content);
-        outer.addView(inner, new FrameLayout.LayoutParams(
+        outer.addView(inner, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
