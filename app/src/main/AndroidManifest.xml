@@ -10,6 +10,7 @@
         android:theme="@style/Theme.NullForge"
         android:usesCleartextTraffic="false">
         <activity android:name=".TweaksActivity" android:screenOrientation="portrait" />
+        <activity android:name=".AssetBrowserActivity" android:screenOrientation="portrait" />
         <activity android:name=".AssetVaultActivity" android:screenOrientation="portrait" />
         <activity android:name=".ProjectActivity" android:screenOrientation="portrait" />
         <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait">
