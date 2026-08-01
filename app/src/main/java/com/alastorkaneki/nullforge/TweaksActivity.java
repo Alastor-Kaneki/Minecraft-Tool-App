@@ -3,8 +3,10 @@ package com.alastorkaneki.nullforge;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -33,15 +35,17 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 public final class TweaksActivity extends Activity {
     private static final int CREATE_PACK = 7001;
+    private static final int PAGE_SIZE = 32;
 
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final Handler main = new Handler(Looper.getMainLooper());
     private final Map<String, LinkedHashMap<String, TweakPack>> selections = new LinkedHashMap<>();
     private final List<TweakPack> catalog = new ArrayList<>();
 
+    private ExecutorService executor;
+    private Handler main;
     private LinearLayout providerRow;
     private LinearLayout sectionRow;
     private LinearLayout list;
@@ -54,15 +58,24 @@ public final class TweaksActivity extends Activity {
     private String section = provider.sections[0];
     private String notice = "";
     private File pendingExport;
+    private boolean destroyed;
+    private int requestToken;
+    private int visibleLimit = PAGE_SIZE;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        Ui.immersive(this);
-        setContentView(buildScreen());
-        renderProviderTabs();
-        renderSectionTabs();
-        load(false);
+        main = new Handler(Looper.getMainLooper());
+        executor = Executors.newSingleThreadExecutor();
+        try {
+            Ui.immersive(this);
+            setContentView(buildScreen());
+            renderProviderTabs();
+            renderSectionTabs();
+            load(false);
+        } catch (Throwable error) {
+            setContentView(failureScreen(error));
+        }
     }
 
     @Override
@@ -73,14 +86,18 @@ public final class TweaksActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        executor.shutdownNow();
+        destroyed = true;
+        requestToken++;
+        if (executor != null) {
+            executor.shutdownNow();
+        }
         super.onDestroy();
     }
 
     private View buildScreen() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Ui.BLACK);
+        root.setBackground(Ui.screenBackground());
         root.setPadding(Ui.dp(this, 16), Ui.dp(this, 20), Ui.dp(this, 16), Ui.dp(this, 12));
 
         LinearLayout header = Ui.row(this);
@@ -90,10 +107,9 @@ public final class TweaksActivity extends Activity {
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        TextView title = Ui.title(this, "Tweaks Library", 26);
-        TextView subtitle = Ui.body(this, "Native selectors for Vanilla Tweaks, Bedrock Tweaks, and BEComTweaks");
-        titles.addView(title);
-        titles.addView(subtitle);
+        titles.addView(Ui.eyebrow(this, "Content Library"));
+        titles.addView(Ui.title(this, "Tweaks", 27));
+        titles.addView(Ui.body(this, "Vanilla Tweaks, Bedrock Tweaks, and BEComTweaks"));
         LinearLayout.LayoutParams titleParams = Ui.weight(1);
         titleParams.leftMargin = Ui.dp(this, 12);
         header.addView(titles, titleParams);
@@ -105,25 +121,20 @@ public final class TweaksActivity extends Activity {
 
         HorizontalScrollView providerScroll = new HorizontalScrollView(this);
         providerScroll.setHorizontalScrollBarEnabled(false);
+        providerScroll.setFillViewport(false);
         providerRow = Ui.row(this);
         providerScroll.addView(providerRow);
-        root.addView(providerScroll, Ui.matchWrap(this, 10));
+        root.addView(providerScroll, Ui.matchWrap(this, 9));
 
         HorizontalScrollView sectionScroll = new HorizontalScrollView(this);
         sectionScroll.setHorizontalScrollBarEnabled(false);
+        sectionScroll.setFillViewport(false);
         sectionRow = Ui.row(this);
         sectionScroll.addView(sectionRow);
-        root.addView(sectionScroll, Ui.matchWrap(this, 10));
+        root.addView(sectionScroll, Ui.matchWrap(this, 12));
 
         LinearLayout controls = Ui.row(this);
-        search = new EditText(this);
-        search.setSingleLine(true);
-        search.setHint("Search packs");
-        search.setHintTextColor(Color.rgb(120, 116, 132));
-        search.setTextColor(Ui.TEXT);
-        search.setTextSize(15);
-        search.setPadding(Ui.dp(this, 14), 0, Ui.dp(this, 14), 0);
-        search.setBackground(Ui.outlined(Ui.PANEL, Color.rgb(58, 52, 72), 14, this));
+        search = Ui.input(this, "Search this catalog");
         search.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence value, int start, int count, int after) {
@@ -131,6 +142,7 @@ public final class TweaksActivity extends Activity {
 
             @Override
             public void onTextChanged(CharSequence value, int start, int before, int count) {
+                visibleLimit = PAGE_SIZE;
                 renderCatalog();
             }
 
@@ -140,23 +152,26 @@ public final class TweaksActivity extends Activity {
         });
         controls.addView(search, new LinearLayout.LayoutParams(0, Ui.dp(this, 50), 1));
 
-        Button refresh = Ui.button(this, "↻");
-        LinearLayout.LayoutParams refreshParams = new LinearLayout.LayoutParams(Ui.dp(this, 52), Ui.dp(this, 50));
+        Button refresh = Ui.button(this, "Refresh");
+        LinearLayout.LayoutParams refreshParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 50));
         refreshParams.leftMargin = Ui.dp(this, 8);
         controls.addView(refresh, refreshParams);
         refresh.setOnClickListener(view -> load(true));
         root.addView(controls, Ui.matchWrap(this, 10));
 
-        LinearLayout statusRow = Ui.row(this);
+        LinearLayout statusPanel = Ui.row(this);
+        statusPanel.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 8));
+        statusPanel.setBackground(Ui.outlined(Ui.PANEL, Ui.BORDER, 7, this));
         status = Ui.body(this, "Loading catalog");
-        statusRow.addView(status, Ui.weight(1));
-        progress = new ProgressBar(this);
-        progress.setIndeterminate(true);
-        statusRow.addView(progress, new LinearLayout.LayoutParams(Ui.dp(this, 28), Ui.dp(this, 28)));
-        root.addView(statusRow, Ui.matchWrap(this, 8));
+        statusRowColor();
+        statusPanel.addView(status, Ui.weight(1));
+        progress = Ui.progress(this);
+        statusPanel.addView(progress, new LinearLayout.LayoutParams(Ui.dp(this, 26), Ui.dp(this, 26)));
+        root.addView(statusPanel, Ui.matchWrap(this, 9));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
         list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.setPadding(0, Ui.dp(this, 4), 0, Ui.dp(this, 12));
@@ -164,54 +179,84 @@ public final class TweaksActivity extends Activity {
         root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         LinearLayout footer = Ui.row(this);
+        footer.setPadding(Ui.dp(this, 12), Ui.dp(this, 10), Ui.dp(this, 12), Ui.dp(this, 10));
+        footer.setBackground(Ui.outlined(Ui.PANEL, Ui.BORDER, 8, this));
         selectedCount = Ui.title(this, "0 selected", 15);
         footer.addView(selectedCount, Ui.weight(1));
-        build = Ui.button(this, "Build pack");
+        build = Ui.primaryButton(this, "Build pack");
         build.setEnabled(false);
         build.setOnClickListener(view -> buildPack());
-        footer.addView(build, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 52)));
+        footer.addView(build, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 50)));
         root.addView(footer);
 
         return root;
     }
 
+    private View failureScreen(Throwable error) {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER);
+        root.setPadding(Ui.dp(this, 24), Ui.dp(this, 24), Ui.dp(this, 24), Ui.dp(this, 24));
+        root.setBackground(Ui.screenBackground());
+        TextView eyebrow = Ui.eyebrow(this, "Safe Mode");
+        eyebrow.setGravity(Gravity.CENTER);
+        root.addView(eyebrow, Ui.matchWrap(this, 8));
+        TextView title = Ui.title(this, "Tweaks could not open", 25);
+        title.setGravity(Gravity.CENTER);
+        root.addView(title, Ui.matchWrap(this, 10));
+        TextView body = Ui.body(this, message(error));
+        body.setGravity(Gravity.CENTER);
+        root.addView(body, Ui.matchWrap(this, 18));
+        Button retry = Ui.primaryButton(this, "Retry");
+        retry.setOnClickListener(view -> recreate());
+        root.addView(retry, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 50)));
+        Button close = Ui.button(this, "Back");
+        close.setOnClickListener(view -> finish());
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 50));
+        closeParams.topMargin = Ui.dp(this, 8);
+        root.addView(close, closeParams);
+        return root;
+    }
+
     private void renderProviderTabs() {
+        if (providerRow == null) {
+            return;
+        }
         providerRow.removeAllViews();
         for (TweakProvider value : TweakProvider.values()) {
-            Button button = Ui.button(this, value.label);
-            boolean active = value == provider;
-            button.setTextColor(active ? Ui.TEXT : Ui.MUTED);
-            button.setBackground(Ui.outlined(active ? Color.rgb(45, 14, 52) : Ui.PANEL, active ? Ui.PURPLE : Color.rgb(52, 48, 62), 14, this));
+            Button button = Ui.tabButton(this, value.label, value == provider, Ui.PURPLE);
             button.setOnClickListener(view -> {
                 provider = value;
                 section = provider.sections[0];
+                visibleLimit = PAGE_SIZE;
                 catalog.clear();
                 notice = "";
                 renderProviderTabs();
                 renderSectionTabs();
                 load(false);
             });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 48));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 46));
             params.rightMargin = Ui.dp(this, 8);
             providerRow.addView(button, params);
         }
     }
 
     private void renderSectionTabs() {
+        if (sectionRow == null) {
+            return;
+        }
         sectionRow.removeAllViews();
         for (String value : provider.sections) {
-            Button button = Ui.button(this, value);
-            boolean active = value.equals(section);
-            button.setTextColor(active ? Ui.TEXT : Ui.MUTED);
-            button.setBackground(Ui.outlined(active ? Color.rgb(47, 16, 28) : Ui.PANEL, active ? Ui.RED : Color.rgb(52, 48, 62), 14, this));
+            Button button = Ui.tabButton(this, value, value.equals(section), Ui.RED);
             button.setOnClickListener(view -> {
                 section = value;
+                visibleLimit = PAGE_SIZE;
                 catalog.clear();
                 notice = "";
                 renderSectionTabs();
                 load(false);
             });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 44));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 43));
             params.rightMargin = Ui.dp(this, 8);
             sectionRow.addView(button, params);
         }
@@ -219,74 +264,112 @@ public final class TweaksActivity extends Activity {
     }
 
     private void load(boolean force) {
+        if (destroyed || executor == null || executor.isShutdown()) {
+            return;
+        }
+        visibleLimit = PAGE_SIZE;
+        int token = ++requestToken;
         progress.setVisibility(View.VISIBLE);
-        status.setText("Loading " + provider.label + " " + section.toLowerCase(Locale.ROOT));
+        status.setText("Loading " + provider.label + " • " + section);
         list.removeAllViews();
         TweakProvider requestedProvider = provider;
         String requestedSection = section;
-        executor.execute(() -> {
-            try {
-                TweaksRepository.Catalog result = TweaksRepository.load(this, requestedProvider, requestedSection, force);
-                main.post(() -> {
-                    if (provider != requestedProvider || !section.equals(requestedSection)) {
-                        return;
-                    }
-                    catalog.clear();
-                    catalog.addAll(result.packs());
-                    notice = result.notice();
-                    progress.setVisibility(View.GONE);
-                    status.setText(catalog.size() + " packs");
-                    renderCatalog();
-                });
-            } catch (Exception error) {
-                main.post(() -> {
-                    if (provider != requestedProvider || !section.equals(requestedSection)) {
-                        return;
-                    }
-                    progress.setVisibility(View.GONE);
-                    status.setText("Catalog failed");
-                    notice = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
-                    renderCatalog();
-                });
-            }
-        });
+        try {
+            executor.execute(() -> {
+                try {
+                    TweaksRepository.Catalog result = TweaksRepository.load(this, requestedProvider, requestedSection, force);
+                    safePost(() -> {
+                        if (token != requestToken || provider != requestedProvider || !section.equals(requestedSection)) {
+                            return;
+                        }
+                        catalog.clear();
+                        catalog.addAll(result.packs());
+                        notice = result.notice();
+                        progress.setVisibility(View.GONE);
+                        status.setText(catalog.size() + " packs available");
+                        renderCatalog();
+                    });
+                } catch (Throwable error) {
+                    safePost(() -> {
+                        if (token != requestToken || provider != requestedProvider || !section.equals(requestedSection)) {
+                            return;
+                        }
+                        progress.setVisibility(View.GONE);
+                        status.setText("Catalog unavailable");
+                        notice = message(error);
+                        renderCatalog();
+                    });
+                }
+            });
+        } catch (RejectedExecutionException error) {
+            progress.setVisibility(View.GONE);
+            status.setText("Catalog stopped");
+        }
     }
 
     private void renderCatalog() {
-        if (list == null) {
+        if (list == null || destroyed) {
             return;
         }
-        list.removeAllViews();
-        if (!notice.isBlank()) {
-            TextView noticeView = Ui.body(this, notice);
-            noticeView.setPadding(Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14), Ui.dp(this, 12));
-            noticeView.setBackground(Ui.outlined(Color.rgb(22, 17, 29), Color.rgb(76, 56, 94), 14, this));
-            list.addView(noticeView, Ui.matchWrap(this, 12));
-        }
-        String query = search == null ? "" : search.getText().toString().trim().toLowerCase(Locale.ROOT);
-        String currentCategory = null;
-        int visible = 0;
-        for (TweakPack pack : catalog) {
-            String haystack = (pack.name + " " + pack.description + " " + pack.category).toLowerCase(Locale.ROOT);
-            if (!query.isBlank() && !haystack.contains(query)) {
-                continue;
+        try {
+            list.removeAllViews();
+            if (notice != null && !notice.trim().isEmpty()) {
+                TextView noticeView = Ui.body(this, notice);
+                noticeView.setPadding(Ui.dp(this, 2), Ui.dp(this, 2), Ui.dp(this, 2), Ui.dp(this, 2));
+                list.addView(Ui.listCard(this, noticeView));
             }
-            if (!pack.category.equals(currentCategory)) {
-                currentCategory = pack.category;
-                TextView heading = Ui.title(this, currentCategory, 18);
-                heading.setPadding(Ui.dp(this, 2), Ui.dp(this, 10), 0, Ui.dp(this, 8));
-                list.addView(heading);
+
+            String query = search == null ? "" : search.getText().toString().trim().toLowerCase(Locale.ROOT);
+            String currentCategory = null;
+            int matched = 0;
+            int shown = 0;
+            for (TweakPack pack : catalog) {
+                String haystack = (pack.name + " " + pack.description + " " + pack.category).toLowerCase(Locale.ROOT);
+                if (!query.isEmpty() && !haystack.contains(query)) {
+                    continue;
+                }
+                matched++;
+                if (shown >= visibleLimit) {
+                    continue;
+                }
+                if (!pack.category.equals(currentCategory)) {
+                    currentCategory = pack.category;
+                    TextView heading = Ui.eyebrow(this, currentCategory);
+                    heading.setPadding(Ui.dp(this, 4), Ui.dp(this, 12), 0, Ui.dp(this, 8));
+                    list.addView(heading);
+                }
+                list.addView(packCard(pack));
+                shown++;
             }
-            list.addView(packCard(pack));
-            visible++;
+
+            if (matched == 0) {
+                TextView empty = Ui.body(this, query.isEmpty() ? "No public catalog is available for this section." : "No packs match this search.");
+                empty.setGravity(Gravity.CENTER);
+                empty.setPadding(Ui.dp(this, 20), Ui.dp(this, 42), Ui.dp(this, 20), Ui.dp(this, 42));
+                list.addView(empty);
+            } else if (shown < matched) {
+                LinearLayout morePanel = new LinearLayout(this);
+                morePanel.setOrientation(LinearLayout.VERTICAL);
+                TextView summary = Ui.body(this, "Showing " + shown + " of " + matched + " packs");
+                summary.setGravity(Gravity.CENTER);
+                morePanel.addView(summary, Ui.matchWrap(this, 10));
+                Button more = Ui.button(this, "Load " + Math.min(PAGE_SIZE, matched - shown) + " more");
+                more.setOnClickListener(view -> {
+                    visibleLimit += PAGE_SIZE;
+                    renderCatalog();
+                });
+                morePanel.addView(more, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 48)));
+                list.addView(Ui.listCard(this, morePanel));
+            }
+            updateSelectionCount();
+        } catch (Throwable error) {
+            list.removeAllViews();
+            TextView failure = Ui.body(this, "The catalog could not be displayed safely.\n" + message(error));
+            failure.setGravity(Gravity.CENTER);
+            failure.setPadding(Ui.dp(this, 16), Ui.dp(this, 40), Ui.dp(this, 16), Ui.dp(this, 40));
+            list.addView(failure);
+            status.setText("Display failed safely");
         }
-        if (visible == 0) {
-            TextView empty = Ui.body(this, query.isBlank() ? "No public GitHub catalog is available for this section." : "No packs match the search.");
-            empty.setGravity(Gravity.CENTER);
-            empty.setPadding(Ui.dp(this, 20), Ui.dp(this, 50), Ui.dp(this, 20), Ui.dp(this, 50));
-            list.addView(empty);
-        }
-        updateSelectionCount();
     }
 
     private View packCard(TweakPack pack) {
@@ -297,74 +380,70 @@ public final class TweaksActivity extends Activity {
         check.setText(pack.name);
         check.setTextColor(Ui.TEXT);
         check.setTextSize(16);
-        check.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        check.setButtonTintList(new android.content.res.ColorStateList(
+        check.setTypeface(android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD));
+        check.setButtonTintList(new ColorStateList(
                 new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}},
-                new int[]{Ui.PURPLE, Color.rgb(108, 102, 118)}
+                new int[]{Ui.PURPLE, Color.rgb(118, 112, 128)}
         ));
         check.setChecked(currentSelection().containsKey(pack.key()));
+        bindToggle(check, pack);
         content.addView(check);
 
-        TextView description = Ui.body(this, pack.description.isBlank() ? "No description supplied upstream." : pack.description);
+        TextView description = Ui.body(this, pack.description.trim().isEmpty() ? "No description supplied upstream." : pack.description);
         LinearLayout.LayoutParams descriptionParams = Ui.matchWrap(this, 0);
         descriptionParams.leftMargin = Ui.dp(this, 34);
         content.addView(description, descriptionParams);
 
         if (!pack.conflicts.isEmpty()) {
             TextView conflicts = Ui.body(this, "Conflicts: " + String.join(", ", pack.conflicts));
-            conflicts.setTextColor(Color.rgb(255, 132, 153));
-            LinearLayout.LayoutParams conflictParams = Ui.matchWrap(this, 0);
-            conflictParams.leftMargin = Ui.dp(this, 34);
-            conflictParams.topMargin = Ui.dp(this, 6);
-            content.addView(conflicts, conflictParams);
+            conflicts.setTextColor(Color.rgb(255, 137, 156));
+            LinearLayout.LayoutParams params = Ui.matchWrap(this, 0);
+            params.leftMargin = Ui.dp(this, 34);
+            params.topMargin = Ui.dp(this, 6);
+            content.addView(conflicts, params);
         }
 
         if (pack.sourceOnly) {
             TextView source = Ui.body(this, "Source export • upstream build required");
-            source.setTextColor(Color.rgb(201, 148, 255));
-            LinearLayout.LayoutParams sourceParams = Ui.matchWrap(this, 0);
-            sourceParams.leftMargin = Ui.dp(this, 34);
-            sourceParams.topMargin = Ui.dp(this, 6);
-            content.addView(source, sourceParams);
+            source.setTextColor(Color.rgb(208, 158, 255));
+            LinearLayout.LayoutParams params = Ui.matchWrap(this, 0);
+            params.leftMargin = Ui.dp(this, 34);
+            params.topMargin = Ui.dp(this, 6);
+            content.addView(source, params);
         }
 
-        check.setOnCheckedChangeListener((button, checked) -> {
-            if (checked) {
-                List<TweakPack> conflicts = activeConflicts(pack);
-                if (!conflicts.isEmpty()) {
-                    button.setChecked(false);
-                    new AlertDialog.Builder(this)
-                            .setTitle("Pack conflict")
-                            .setMessage(pack.name + " conflicts with " + names(conflicts) + ". Add it anyway?")
-                            .setNegativeButton("Cancel", null)
-                            .setPositiveButton("Add anyway", (dialog, which) -> {
-                                currentSelection().put(pack.key(), pack);
-                                check.setOnCheckedChangeListener(null);
-                                check.setChecked(true);
-                                check.setOnCheckedChangeListener((innerButton, innerChecked) -> toggle(pack, innerChecked));
-                                updateSelectionCount();
-                            })
-                            .show();
-                } else {
-                    currentSelection().put(pack.key(), pack);
-                    updateSelectionCount();
-                }
-            } else {
-                currentSelection().remove(pack.key());
-                updateSelectionCount();
-            }
-        });
-
-        return Ui.card(this, content);
+        return Ui.listCard(this, content);
     }
 
-    private void toggle(TweakPack pack, boolean checked) {
-        if (checked) {
-            currentSelection().put(pack.key(), pack);
-        } else {
-            currentSelection().remove(pack.key());
-        }
-        updateSelectionCount();
+    private void bindToggle(CheckBox check, TweakPack pack) {
+        check.setOnCheckedChangeListener((button, checked) -> {
+            if (!checked) {
+                currentSelection().remove(pack.key());
+                updateSelectionCount();
+                return;
+            }
+            List<TweakPack> conflicts = activeConflicts(pack);
+            if (conflicts.isEmpty()) {
+                currentSelection().put(pack.key(), pack);
+                updateSelectionCount();
+                return;
+            }
+            check.setOnCheckedChangeListener(null);
+            check.setChecked(false);
+            bindToggle(check, pack);
+            new AlertDialog.Builder(this)
+                    .setTitle("Pack conflict")
+                    .setMessage(pack.name + " conflicts with " + names(conflicts) + ". Add it anyway?")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Add anyway", (dialog, which) -> {
+                        currentSelection().put(pack.key(), pack);
+                        check.setOnCheckedChangeListener(null);
+                        check.setChecked(true);
+                        bindToggle(check, pack);
+                        updateSelectionCount();
+                    })
+                    .show();
+        });
     }
 
     private List<TweakPack> activeConflicts(TweakPack pack) {
@@ -388,11 +467,11 @@ public final class TweaksActivity extends Activity {
     }
 
     private String names(List<TweakPack> packs) {
-        List<String> names = new ArrayList<>();
+        List<String> values = new ArrayList<>();
         for (TweakPack pack : packs) {
-            names.add(pack.name);
+            values.add(pack.name);
         }
-        return String.join(", ", names);
+        return String.join(", ", values);
     }
 
     private LinkedHashMap<String, TweakPack> currentSelection() {
@@ -411,82 +490,89 @@ public final class TweaksActivity extends Activity {
 
     private void buildPack() {
         List<TweakPack> selected = new ArrayList<>(currentSelection().values());
-        if (selected.isEmpty()) {
+        if (selected.isEmpty() || executor == null || executor.isShutdown()) {
             return;
         }
         build.setEnabled(false);
         progress.setVisibility(View.VISIBLE);
         TweakProvider requestedProvider = provider;
         String requestedSection = section;
-        executor.execute(() -> {
-            try {
-                PackAssembler.BuildResult result = PackAssembler.build(
-                        this,
-                        requestedProvider,
-                        requestedSection,
-                        selected,
-                        (message, current, total) -> main.post(() -> status.setText(message + " • " + current + "/" + total))
-                );
-                main.post(() -> {
-                    progress.setVisibility(View.GONE);
-                    build.setEnabled(true);
-                    pendingExport = result.file();
-                    Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-                    save.addCategory(Intent.CATEGORY_OPENABLE);
-                    save.setType(result.mimeType());
-                    save.putExtra(Intent.EXTRA_TITLE, result.fileName());
-                    startActivityForResult(save, CREATE_PACK);
-                    String message = result.included() + " packs assembled";
-                    if (!result.missing().isEmpty()) {
-                        message += ". Source not found for: " + String.join(", ", result.missing());
-                    }
-                    status.setText(message);
-                });
-            } catch (Exception error) {
-                main.post(() -> {
-                    progress.setVisibility(View.GONE);
-                    build.setEnabled(true);
-                    String message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
-                    status.setText("Build failed");
-                    new AlertDialog.Builder(this)
-                            .setTitle("Could not build pack")
-                            .setMessage(message)
-                            .setPositiveButton("OK", null)
-                            .show();
-                });
-            }
-        });
+        try {
+            executor.execute(() -> {
+                try {
+                    PackAssembler.BuildResult result = PackAssembler.build(
+                            this,
+                            requestedProvider,
+                            requestedSection,
+                            selected,
+                            (message, current, total) -> safePost(() -> status.setText(message + " • " + current + "/" + total))
+                    );
+                    safePost(() -> {
+                        progress.setVisibility(View.GONE);
+                        build.setEnabled(true);
+                        pendingExport = result.file();
+                        Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                        save.addCategory(Intent.CATEGORY_OPENABLE);
+                        save.setType(result.mimeType());
+                        save.putExtra(Intent.EXTRA_TITLE, result.fileName());
+                        startActivityForResult(save, CREATE_PACK);
+                        String message = result.included() + " packs assembled";
+                        if (!result.missing().isEmpty()) {
+                            message += " • missing " + String.join(", ", result.missing());
+                        }
+                        status.setText(message);
+                    });
+                } catch (Throwable error) {
+                    safePost(() -> {
+                        progress.setVisibility(View.GONE);
+                        build.setEnabled(true);
+                        status.setText("Build failed");
+                        new AlertDialog.Builder(this)
+                                .setTitle("Could not build pack")
+                                .setMessage(message(error))
+                                .setPositiveButton("OK", null)
+                                .show();
+                    });
+                }
+            });
+        } catch (RejectedExecutionException error) {
+            build.setEnabled(true);
+            progress.setVisibility(View.GONE);
+        }
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == CREATE_PACK && resultCode == RESULT_OK && data != null && data.getData() != null && pendingExport != null) {
+        if (requestCode == CREATE_PACK && resultCode == RESULT_OK && data != null && data.getData() != null && pendingExport != null && executor != null && !executor.isShutdown()) {
             Uri destination = data.getData();
             File source = pendingExport;
-            executor.execute(() -> {
-                try (FileInputStream input = new FileInputStream(source); OutputStream output = getContentResolver().openOutputStream(destination, "w")) {
-                    if (output == null) {
-                        throw new IllegalStateException("Could not open destination");
+            try {
+                executor.execute(() -> {
+                    try (FileInputStream input = new FileInputStream(source); OutputStream output = getContentResolver().openOutputStream(destination, "w")) {
+                        if (output == null) {
+                            throw new IllegalStateException("Could not open destination");
+                        }
+                        byte[] buffer = new byte[32768];
+                        int read;
+                        while ((read = input.read(buffer)) >= 0) {
+                            output.write(buffer, 0, read);
+                        }
+                        output.flush();
+                        source.delete();
+                        safePost(() -> {
+                            status.setText("Pack saved");
+                            Toast.makeText(this, "Pack exported", Toast.LENGTH_LONG).show();
+                        });
+                    } catch (Throwable error) {
+                        safePost(() -> new AlertDialog.Builder(this)
+                                .setTitle("Export failed")
+                                .setMessage(message(error))
+                                .setPositiveButton("OK", null)
+                                .show());
                     }
-                    byte[] buffer = new byte[32768];
-                    int read;
-                    while ((read = input.read(buffer)) >= 0) {
-                        output.write(buffer, 0, read);
-                    }
-                    output.flush();
-                    source.delete();
-                    main.post(() -> {
-                        status.setText("Pack saved");
-                        Toast.makeText(this, "Pack exported", Toast.LENGTH_LONG).show();
-                    });
-                } catch (Exception error) {
-                    main.post(() -> new AlertDialog.Builder(this)
-                            .setTitle("Export failed")
-                            .setMessage(error.getMessage())
-                            .setPositiveButton("OK", null)
-                            .show());
-                }
-            });
+                });
+            } catch (RejectedExecutionException ignored) {
+            }
         }
         super.onActivityResult(requestCode, resultCode, data);
     }
@@ -496,14 +582,13 @@ public final class TweaksActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(Ui.dp(this, 8), Ui.dp(this, 4), Ui.dp(this, 8), 0);
 
-        TextView subtitle = Ui.body(this, provider.subtitle);
-        subtitle.setTextColor(Ui.PURPLE);
+        TextView subtitle = Ui.eyebrow(this, provider.subtitle);
         content.addView(subtitle, Ui.matchWrap(this, 12));
 
-        TextView text = Ui.body(this, provider.credits + "\n\nIndividual pack credits and license terms are read from the upstream projects. NullForge Studio does not remove or replace upstream attribution.");
+        TextView text = Ui.body(this, provider.credits + "\n\nIndividual pack credits and licenses remain attached to the upstream projects.");
         content.addView(text, Ui.matchWrap(this, 16));
 
-        Button site = Ui.button(this, "Open " + provider.label);
+        Button site = Ui.primaryButton(this, "Open " + provider.label);
         site.setOnClickListener(view -> open(provider.website));
         content.addView(site, Ui.matchWrap(this, 8));
 
@@ -521,8 +606,40 @@ public final class TweaksActivity extends Activity {
     private void open(String url) {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-        } catch (Exception error) {
+        } catch (Throwable error) {
             Toast.makeText(this, "No app can open this link", Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void safePost(Runnable action) {
+        if (main == null || destroyed) {
+            return;
+        }
+        main.post(() -> {
+            if (destroyed || isFinishing() || (Build.VERSION.SDK_INT >= 17 && isDestroyed())) {
+                return;
+            }
+            try {
+                action.run();
+            } catch (Throwable error) {
+                if (status != null) {
+                    status.setText("Recovered from a display error");
+                }
+            }
+        });
+    }
+
+    private void statusRowColor() {
+        if (status != null) {
+            status.setTextColor(Ui.MUTED);
+        }
+    }
+
+    private String message(Throwable error) {
+        if (error == null) {
+            return "Unknown error";
+        }
+        String value = error.getMessage();
+        return value == null || value.trim().isEmpty() ? error.getClass().getSimpleName() : value;
     }
 }

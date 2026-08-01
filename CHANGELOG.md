@@ -1,12 +1,21 @@
 # Changelog
 
+## 0.4.0
+
+- Rebuilt the Tweaks Library to avoid oversized view trees and callbacks touching closed activities.
+- Added paged catalog rendering with 32 packs per batch and safe load-more controls.
+- Added safe-mode recovery instead of allowing Tweaks rendering failures to terminate the app.
+- Standardized the launcher, Tweaks Library, Bedrock and Java workspaces, Asset Vault, Asset Browser, recovery screens, inputs, tabs, cards, footers, status panels, and dialogs around one OreUI-inspired component system.
+- Replaced mixed styling with compact dark panels, square-rounded controls, strong focus states, and red-purple accents.
+- Removed the animated border renderer and every deliberate UI animation.
+- Replaced indeterminate loading spinners with static status bars.
+- Disabled activity and dialog window transitions.
+
 ## 0.3.1
 
 - Reworked launcher startup so feature activity classes are loaded only when opened.
-- Replaced the software-rendered card animation with a hardware-safe animated OreUI border renderer.
 - Deferred immersive-mode changes until the window view is attached.
 - Added a recovery launcher instead of allowing startup rendering failures to terminate the app.
-- Preserved the AMOLED OreUI-inspired cards, compact controls, red-purple accents, and animated outlines.
 
 ## 0.3.0
 
@@ -28,5 +37,4 @@
 - Added search, categories, independent selections, and conflict warnings.
 - Added on-device `.zip`, `.mcpack`, and `.mcaddon` assembly.
 - Restored the missing launcher, project creation, and asset source activities.
-- Added immersive AMOLED screens and animated rainbow card outlines.
 - Removed the obsolete source hydration workflow.

@@ -34,7 +34,8 @@ public final class MainActivity extends Activity {
     private View screen() {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(Ui.BLACK);
+        scroll.setBackground(Ui.screenBackground());
+        scroll.setClipToPadding(false);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -42,10 +43,9 @@ public final class MainActivity extends Activity {
         root.setPadding(Ui.dp(this, 18), Ui.dp(this, 34), Ui.dp(this, 18), Ui.dp(this, 28));
         scroll.addView(root);
 
-        TextView eyebrow = Ui.body(this, "MINECRAFT CREATOR WORKSPACE");
-        eyebrow.setTextColor(Ui.PURPLE);
+        TextView eyebrow = Ui.eyebrow(this, "Minecraft Creator Workspace");
         eyebrow.setGravity(Gravity.CENTER);
-        root.addView(eyebrow, Ui.matchWrap(this, 6));
+        root.addView(eyebrow, Ui.matchWrap(this, 7));
 
         TextView title = Ui.title(this, "NullForge Studio", 34);
         title.setGravity(Gravity.CENTER);
@@ -58,20 +58,22 @@ public final class MainActivity extends Activity {
 
         root.addView(destination(
                 "Tweaks Library",
-                "Native selectors for Vanilla Tweaks, Bedrock Tweaks, and BEComTweaks with independent credits and on-device exports.",
-                "Open selectors",
+                "Browse Vanilla Tweaks, Bedrock Tweaks, and BEComTweaks with native filters, credits, conflict checks, and local exports.",
+                "Open library",
                 "com.alastorkaneki.nullforge.TweaksActivity",
                 null,
-                null
+                null,
+                true
         ));
 
         root.addView(destination(
                 "Bedrock Workspace",
-                "Create resource packs, behavior packs, add-ons, skin packs, and world templates.",
+                "Create resource packs, behavior packs, paired add-ons, skin packs, and world templates.",
                 "Open Bedrock",
                 "com.alastorkaneki.nullforge.ProjectActivity",
                 "edition",
-                "BEDROCK"
+                "BEDROCK",
+                false
         ));
 
         root.addView(destination(
@@ -80,19 +82,21 @@ public final class MainActivity extends Activity {
                 "Open Java",
                 "com.alastorkaneki.nullforge.ProjectActivity",
                 "edition",
-                "JAVA"
+                "JAVA",
+                false
         ));
 
         root.addView(destination(
                 "Official Asset Vault",
-                "Fetch and cache Mojang's Bedrock samples or Java asset indexes for project use.",
+                "Fetch Mojang assets, cache complete versions offline, and import individual files or folders into projects.",
                 "Open vault",
                 "com.alastorkaneki.nullforge.AssetVaultActivity",
                 null,
-                null
+                null,
+                false
         ));
 
-        TextView legal = Ui.body(this, "Unofficial creator tool. Minecraft belongs to Mojang Studios and Microsoft. Upstream tweak projects and individual creators retain ownership of their work.");
+        TextView legal = Ui.body(this, "Unofficial creator tool. Minecraft belongs to Mojang Studios and Microsoft. Upstream projects and individual creators retain ownership of their work.");
         legal.setGravity(Gravity.CENTER);
         legal.setPadding(Ui.dp(this, 12), Ui.dp(this, 12), Ui.dp(this, 12), 0);
         root.addView(legal);
@@ -100,17 +104,15 @@ public final class MainActivity extends Activity {
         return scroll;
     }
 
-    private View destination(String name, String description, String action, String activityClass, String extraName, String extraValue) {
+    private View destination(String name, String description, String action, String activityClass, String extraName, String extraValue, boolean primary) {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
 
         TextView heading = Ui.title(this, name, 21);
         content.addView(heading, Ui.matchWrap(this, 6));
+        content.addView(Ui.body(this, description), Ui.matchWrap(this, 14));
 
-        TextView body = Ui.body(this, description);
-        content.addView(body, Ui.matchWrap(this, 14));
-
-        Button button = Ui.button(this, action);
+        Button button = primary ? Ui.primaryButton(this, action) : Ui.button(this, action);
         button.setOnClickListener(view -> open(activityClass, extraName, extraValue));
         content.addView(button, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 50)));
 
@@ -138,32 +140,25 @@ public final class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
-        root.setPadding(48, 48, 48, 48);
-        root.setBackgroundColor(android.graphics.Color.rgb(3, 3, 5));
+        root.setPadding(Ui.dp(this, 24), Ui.dp(this, 24), Ui.dp(this, 24), Ui.dp(this, 24));
+        root.setBackground(Ui.screenBackground());
 
-        TextView title = new TextView(this);
-        title.setText("NullForge started in recovery mode");
-        title.setTextColor(android.graphics.Color.WHITE);
-        title.setTextSize(24);
+        TextView eyebrow = Ui.eyebrow(this, "Recovery Mode");
+        eyebrow.setGravity(Gravity.CENTER);
+        root.addView(eyebrow, Ui.matchWrap(this, 8));
+
+        TextView title = Ui.title(this, "NullForge could not draw the launcher", 24);
         title.setGravity(Gravity.CENTER);
-        root.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(title, Ui.matchWrap(this, 12));
 
-        TextView message = new TextView(this);
-        message.setText(error.getClass().getName() + "\n\n" + String.valueOf(error.getMessage()));
-        message.setTextColor(android.graphics.Color.LTGRAY);
-        message.setTextSize(14);
+        TextView message = Ui.body(this, error.getClass().getName() + "\n\n" + String.valueOf(error.getMessage()));
         message.setGravity(Gravity.CENTER);
         message.setTextIsSelectable(true);
-        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        messageParams.topMargin = 24;
-        root.addView(message, messageParams);
+        root.addView(message, Ui.matchWrap(this, 20));
 
-        Button retry = new Button(this);
-        retry.setText("Retry launcher");
+        Button retry = Ui.primaryButton(this, "Retry launcher");
         retry.setOnClickListener(view -> recreate());
-        LinearLayout.LayoutParams retryParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        retryParams.topMargin = 28;
-        root.addView(retry, retryParams);
+        root.addView(retry, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 50)));
         return root;
     }
 }
