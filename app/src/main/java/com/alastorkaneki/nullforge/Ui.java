@@ -13,6 +13,7 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -95,7 +96,7 @@ public final class Ui {
         button.setPadding(dp(context, 14), dp(context, 10), dp(context, 14), dp(context, 10));
         button.setMinHeight(0);
         button.setMinimumHeight(0);
-        button.setBackground(roundRect(PANEL_LIGHT, 14, context));
+        button.setBackground(outlined(PANEL_LIGHT, Color.rgb(66, 57, 80), 14, context));
         return button;
     }
 
@@ -112,17 +113,9 @@ public final class Ui {
         return drawable;
     }
 
-    public static LinearLayout card(Context context, View content) {
-        LinearLayout outer = new LinearLayout(context);
-        outer.setOrientation(LinearLayout.VERTICAL);
-        outer.setPadding(dp(context, 2), dp(context, 2), dp(context, 2), dp(context, 2));
-        GradientDrawable border = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{RED, Color.rgb(225, 49, 175), PURPLE}
-        );
-        border.setCornerRadius(dp(context, 18));
-        outer.setBackground(border);
-
+    public static RainbowBorderLayout card(Context context, View content) {
+        RainbowBorderLayout outer = new RainbowBorderLayout(context);
+        outer.setPadding(dp(context, 3), dp(context, 3), dp(context, 3), dp(context, 3));
         LinearLayout.LayoutParams outerParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -135,7 +128,7 @@ public final class Ui {
         inner.setPadding(dp(context, 18), dp(context, 16), dp(context, 18), dp(context, 16));
         inner.setBackground(roundRect(PANEL, 16, context));
         inner.addView(content);
-        outer.addView(inner, new LinearLayout.LayoutParams(
+        outer.addView(inner, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
