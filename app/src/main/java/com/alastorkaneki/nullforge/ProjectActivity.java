@@ -39,7 +39,9 @@ public final class ProjectActivity extends Activity {
 
     private View screen() {
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(Ui.BLACK);
+        scroll.setFillViewport(true);
+        scroll.setBackground(Ui.screenBackground());
+        scroll.setClipToPadding(false);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(Ui.dp(this, 18), Ui.dp(this, 28), Ui.dp(this, 18), Ui.dp(this, 28));
@@ -49,49 +51,45 @@ public final class ProjectActivity extends Activity {
         Button back = Ui.button(this, "‹");
         back.setOnClickListener(view -> finish());
         header.addView(back, new LinearLayout.LayoutParams(Ui.dp(this, 52), Ui.dp(this, 48)));
-        TextView title = Ui.title(this, edition.equals("JAVA") ? "Java Workspace" : "Bedrock Workspace", 26);
+        LinearLayout titles = new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
+        titles.addView(Ui.eyebrow(this, edition.equals("JAVA") ? "Java Edition" : "Bedrock Edition"));
+        titles.addView(Ui.title(this, "Project Workspace", 27));
         LinearLayout.LayoutParams titleParams = Ui.weight(1);
         titleParams.leftMargin = Ui.dp(this, 12);
-        header.addView(title, titleParams);
+        header.addView(titles, titleParams);
         root.addView(header, Ui.matchWrap(this, 18));
 
         TextView intro = Ui.body(this, edition.equals("JAVA")
-                ? "Create a local Java resource-pack or data-pack project with a starter metadata file."
-                : "Create a local Bedrock resource-pack or behavior-pack project with a fresh manifest.");
-        root.addView(intro, Ui.matchWrap(this, 18));
+                ? "Create local Java resource-pack and data-pack projects with starter metadata ready for cached assets."
+                : "Create local Bedrock resource-pack, behavior-pack, and paired add-on projects with fresh manifests.");
+        root.addView(Ui.listCard(this, intro));
 
-        root.addView(projectType("Resource Pack", edition.equals("JAVA") ? Project.Kind.JAVA_RESOURCE : Project.Kind.BEDROCK_RESOURCE));
-        root.addView(projectType(edition.equals("JAVA") ? "Data Pack" : "Behavior Pack", edition.equals("JAVA") ? Project.Kind.JAVA_DATA : Project.Kind.BEDROCK_BEHAVIOR));
+        root.addView(projectType("Resource Pack", edition.equals("JAVA") ? Project.Kind.JAVA_RESOURCE : Project.Kind.BEDROCK_RESOURCE, true));
+        root.addView(projectType(edition.equals("JAVA") ? "Data Pack" : "Behavior Pack", edition.equals("JAVA") ? Project.Kind.JAVA_DATA : Project.Kind.BEDROCK_BEHAVIOR, false));
         if (edition.equals("BEDROCK")) {
-            root.addView(projectType("Paired Add-On", Project.Kind.BEDROCK_ADDON));
+            root.addView(projectType("Paired Add-On", Project.Kind.BEDROCK_ADDON, false));
         } else {
-            root.addView(projectType("Combined Resource + Data", Project.Kind.JAVA_COMBINED));
+            root.addView(projectType("Combined Resource + Data", Project.Kind.JAVA_COMBINED, false));
         }
 
         return scroll;
     }
 
-    private View projectType(String label, Project.Kind kind) {
+    private View projectType(String label, Project.Kind kind, boolean primary) {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        TextView title = Ui.title(this, label, 20);
-        content.addView(title, Ui.matchWrap(this, 8));
-        TextView body = Ui.body(this, "Creates a project folder in the app workspace and adds starter metadata.");
-        content.addView(body, Ui.matchWrap(this, 14));
-        Button create = Ui.button(this, "Create project");
+        content.addView(Ui.title(this, label, 20), Ui.matchWrap(this, 8));
+        content.addView(Ui.body(this, "Creates a project folder in app storage and adds the required starter metadata."), Ui.matchWrap(this, 14));
+        Button create = primary ? Ui.primaryButton(this, "Create project") : Ui.button(this, "Create project");
         create.setOnClickListener(view -> prompt(kind, label));
         content.addView(create, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 50)));
         return Ui.card(this, content);
     }
 
     private void prompt(Project.Kind kind, String label) {
-        EditText name = new EditText(this);
-        name.setHint(label + " name");
-        name.setTextColor(Ui.TEXT);
-        name.setHintTextColor(Ui.MUTED);
-        name.setSingleLine(true);
+        EditText name = Ui.input(this, label + " name");
         name.setPadding(Ui.dp(this, 14), Ui.dp(this, 8), Ui.dp(this, 14), Ui.dp(this, 8));
-        name.setBackground(Ui.outlined(Ui.PANEL, Ui.PURPLE, 12, this));
 
         new AlertDialog.Builder(this)
                 .setTitle("Create " + label)
