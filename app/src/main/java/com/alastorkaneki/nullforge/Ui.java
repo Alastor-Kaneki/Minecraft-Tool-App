@@ -153,10 +153,13 @@ public final class Ui {
     }
 
     public static ProgressBar progress(Context context) {
-        ProgressBar progress = new ProgressBar(context);
-        progress.setIndeterminate(true);
+        ProgressBar progress = new ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setIndeterminate(false);
+        progress.setMax(100);
+        progress.setProgress(100);
         if (Build.VERSION.SDK_INT >= 21) {
-            progress.setIndeterminateTintList(ColorStateList.valueOf(PURPLE));
+            progress.setProgressTintList(ColorStateList.valueOf(PURPLE));
+            progress.setProgressBackgroundTintList(ColorStateList.valueOf(Color.rgb(45, 42, 52)));
         }
         return progress;
     }
