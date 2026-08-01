@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+- Replaced the link-only Asset Vault with direct official asset downloading.
+- Added separate versioned offline caches for Bedrock stable, Bedrock preview, Java releases, and Java snapshots.
+- Added full Bedrock release archive extraction from `Mojang/bedrock-samples`.
+- Added Java client JAR extraction plus complete asset-index object downloading.
+- Added recursive file and folder browsing, search, image previews, and text previews.
+- Added file-level, folder-level, and entire-tree selection.
+- Added edition-aware copying into existing Bedrock and Java projects with collision reporting.
+- Added cache deletion and automatic reuse of existing snapshots.
+
 ## 0.2.0
 
 - Added the native Tweaks Library.
