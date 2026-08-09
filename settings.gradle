@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = 'NullForgeStudio'
-include ':app'
+rootProject.name = 'WorldShuttle'
+include ':worldshuttle'
