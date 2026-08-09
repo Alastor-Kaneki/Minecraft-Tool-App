@@ -6,6 +6,7 @@ on:
     paths:
       - 'bedrockforge/**'
       - 'settings.gradle'
+      - 'gradle.properties'
       - '.github/workflows/build-bedrockforge.yml'
 
 jobs:
