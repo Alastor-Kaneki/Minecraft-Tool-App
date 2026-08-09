@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = 'NullForgeStudio'
 include ':app'
+include ':bedrockforge'
