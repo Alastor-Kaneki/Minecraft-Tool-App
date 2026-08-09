@@ -1,0 +1,2 @@
+-keep class dev.alastor.worldshuttle.** { *; }
+-keep class rikka.shizuku.** { *; }
