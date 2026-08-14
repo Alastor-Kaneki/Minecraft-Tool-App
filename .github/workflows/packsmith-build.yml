@@ -1,7 +1,7 @@
-name: PackSmith compatibility build
+name: PackSmith v0.2.0 build
 on:
   push:
-    branches: [packsmith-build-v0.1.2]
+    branches: [packsmith-build-v0.2.0]
 
 jobs:
   build:
@@ -18,43 +18,84 @@ jobs:
         shell: bash
         run: |
           rm -rf /tmp/mt-demo/template/src/main/java/*
-          mkdir -p /tmp/mt-demo/template/src/main/java/dev/packsmith/mt
-          cp -a .packsmith-build/src/dev/packsmith/mt/. /tmp/mt-demo/template/src/main/java/dev/packsmith/mt/
-          python3 - <<'PY'
+          rm -rf /tmp/packsmith-src && mkdir -p /tmp/packsmith-src
+          cat .packsmith-build/v020-part-*.b64 | base64 -d > /tmp/packsmith-src.zip
+          unzip -q /tmp/packsmith-src.zip -d /tmp/packsmith-src
+          cp -a /tmp/packsmith-src/dev/. /tmp/mt-demo/template/src/main/java/dev/
+          python3 - <<'PY2'
           from pathlib import Path
           p=Path('/tmp/mt-demo/template/build.gradle')
           s=p.read_text()
           start=s.index('mtPlugin {')
           i=start+s[start:].index('{')
-          depth=0
-          end=None
+          depth=0; end=None
           for j in range(i,len(s)):
               if s[j]=='{': depth+=1
               elif s[j]=='}':
                   depth-=1
                   if depth==0:
-                      end=j+1
-                      break
-          assert end
+                      end=j+1; break
           interfaces = [
-            'dev.packsmith.mt.GenerateResourcePackMenu',
-            'dev.packsmith.mt.GenerateBehaviorPackMenu',
-            'dev.packsmith.mt.GenerateLinkedBehaviorPackMenu',
-            'dev.packsmith.mt.RefreshManifestUuidsMenu',
-            'dev.packsmith.mt.ValidateManifestMenu',
-            'dev.packsmith.mt.FormatJsonMenu',
-            'dev.packsmith.mt.MinifyJsonMenu',
-            'dev.packsmith.mt.ValidateJsonMenu',
-            'dev.packsmith.mt.InsertUuidMenu',
-            'dev.packsmith.mt.InsertQuotedUuidMenu',
-            'dev.packsmith.mt.ReplaceWithUuidMenu',
             'dev.packsmith.mt.BedrockIdentifierMenu',
+            'dev.packsmith.mt.BumpPackVersionMenu',
+            'dev.packsmith.mt.CopyHeaderUuidMenu',
+            'dev.packsmith.mt.CreateAddonScaffoldMenu',
+            'dev.packsmith.mt.CreateBpScaffoldMenu',
+            'dev.packsmith.mt.CreateRpScaffoldMenu',
+            'dev.packsmith.mt.FormatJsonMenu',
+            'dev.packsmith.mt.GenerateAnimationControllerMenu',
+            'dev.packsmith.mt.GenerateAnimationMenu',
+            'dev.packsmith.mt.GenerateAttachableMenu',
+            'dev.packsmith.mt.GenerateBehaviorPackMenu',
+            'dev.packsmith.mt.GenerateBlockMenu',
+            'dev.packsmith.mt.GenerateClientEntityMenu',
+            'dev.packsmith.mt.GenerateEntityMenu',
+            'dev.packsmith.mt.GenerateFunctionMenu',
+            'dev.packsmith.mt.GenerateFurnaceRecipeMenu',
+            'dev.packsmith.mt.GenerateItemMenu',
+            'dev.packsmith.mt.GenerateLinkedBehaviorPackMenu',
+            'dev.packsmith.mt.GenerateLootTableMenu',
+            'dev.packsmith.mt.GenerateParticleMenu',
+            'dev.packsmith.mt.GenerateRenderControllerMenu',
+            'dev.packsmith.mt.GenerateResourcePackMenu',
+            'dev.packsmith.mt.GenerateScriptManifestMenu',
+            'dev.packsmith.mt.GenerateShapedRecipeMenu',
+            'dev.packsmith.mt.GenerateShapelessRecipeMenu',
+            'dev.packsmith.mt.GenerateSpawnRulesMenu',
+            'dev.packsmith.mt.GenerateTickJsonMenu',
+            'dev.packsmith.mt.InsertItemTextureEntryMenu',
             'dev.packsmith.mt.InsertNamespaceMenu',
+            'dev.packsmith.mt.InsertQuotedUuidMenu',
+            'dev.packsmith.mt.InsertSoundDefinitionMenu',
+            'dev.packsmith.mt.InsertTerrainTextureEntryMenu',
+            'dev.packsmith.mt.InsertUuidMenu',
+            'dev.packsmith.mt.LinkRpFromClipboardMenu',
+            'dev.packsmith.mt.MinifyJsonMenu',
+            'dev.packsmith.mt.NormalizeIdentifiersMenu',
+            'dev.packsmith.mt.PackAuditMenu',
+            'dev.packsmith.mt.PixelArtStudioFunction',
+            'dev.packsmith.mt.RefreshManifestUuidsMenu',
+            'dev.packsmith.mt.ReplaceWithUuidMenu',
+            'dev.packsmith.mt.SortJsonKeysMenu',
+            'dev.packsmith.mt.ValidateJsonMenu',
+            'dev.packsmith.mt.ValidateManifestMenu',
           ]
-          block='''mtPlugin {\n    pluginID = "dev.packsmith.mt"\n    versionCode = 3\n    versionName = "0.1.2"\n    name = "PackSmith"\n    description = "Bedrock pack tools; compatibility build without PluginUI dialogs"\n    interfaces = [\n''' + ''.join('        "'+x+'",\n' for x in interfaces) + '''    ]\n    pushTarget = "auto"\n}'''
+          lines = [
+              'mtPlugin {',
+              '    pluginID = "dev.packsmith.mt"',
+              '    versionCode = 4',
+              '    versionName = "0.2.0"',
+              '    name = "PackSmith"',
+              '    description = "Bedrock pack workshop: generators, scaffolds, JSON tools, Pixel Art Studio"',
+              '    mainPreference = "dev.packsmith.mt.PackSmithPreference"',
+              '    interfaces = [',
+          ]
+          lines += ['        "'+x+'",' for x in interfaces]
+          lines += ['    ]','    pushTarget = "auto"','}']
+          block='\n'.join(lines)
           p.write_text(s[:start]+block+s[end:])
           print(p.read_text())
-          PY
+          PY2
       - name: Build release MTP
         working-directory: /tmp/mt-demo
         run: ./gradlew template:packageReleaseMtp --stacktrace
@@ -64,12 +105,12 @@ jobs:
           mkdir -p /tmp/out
           f=$(find /tmp/mt-demo/template/build/outputs/mt-plugin -type f -name '*.mtp' | head -n1)
           test -n "$f"
-          cp "$f" /tmp/out/PackSmith-v0.1.2.mtp
-          unzip -l /tmp/out/PackSmith-v0.1.2.mtp
-          unzip -p /tmp/out/PackSmith-v0.1.2.mtp manifest.json
-          sha256sum /tmp/out/PackSmith-v0.1.2.mtp
+          cp "$f" /tmp/out/PackSmith-v0.2.0.mtp
+          unzip -t /tmp/out/PackSmith-v0.2.0.mtp
+          unzip -p /tmp/out/PackSmith-v0.2.0.mtp manifest.json
+          sha256sum /tmp/out/PackSmith-v0.2.0.mtp
       - uses: actions/upload-artifact@v4
         with:
-          name: PackSmith-v0.1.2
-          path: /tmp/out/PackSmith-v0.1.2.mtp
+          name: PackSmith-v0.2.0
+          path: /tmp/out/PackSmith-v0.2.0.mtp
           if-no-files-found: error
