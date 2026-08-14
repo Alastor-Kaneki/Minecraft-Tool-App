@@ -1,0 +1,77 @@
+name: PackSmith compatibility build
+on:
+  push:
+    branches: [packsmith-build-v0.1.2]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Clone official MT v3 demo
+        run: git clone --depth=1 https://gitee.com/L-JINBIN/mt-plugin-v3-demo.git /tmp/mt-demo
+      - name: Install PackSmith source
+        shell: bash
+        run: |
+          rm -rf /tmp/mt-demo/template/src/main/java/*
+          mkdir -p /tmp/mt-demo/template/src/main/java/dev/packsmith/mt
+          rm -rf /tmp/packsmith-src && mkdir -p /tmp/packsmith-src
+          unzip -q .packsmith-build/src.zip -d /tmp/packsmith-src
+          cp -a /tmp/packsmith-src/src/dev/packsmith/mt/. /tmp/mt-demo/template/src/main/java/dev/packsmith/mt/
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/mt-demo/template/build.gradle')
+          s=p.read_text()
+          start=s.index('mtPlugin {')
+          i=start+s[start:].index('{')
+          depth=0
+          end=None
+          for j in range(i,len(s)):
+              if s[j]=='{': depth+=1
+              elif s[j]=='}':
+                  depth-=1
+                  if depth==0:
+                      end=j+1
+                      break
+          assert end
+          interfaces = [
+            'dev.packsmith.mt.GenerateResourcePackMenu',
+            'dev.packsmith.mt.GenerateBehaviorPackMenu',
+            'dev.packsmith.mt.GenerateLinkedBehaviorPackMenu',
+            'dev.packsmith.mt.RefreshManifestUuidsMenu',
+            'dev.packsmith.mt.ValidateManifestMenu',
+            'dev.packsmith.mt.FormatJsonMenu',
+            'dev.packsmith.mt.MinifyJsonMenu',
+            'dev.packsmith.mt.ValidateJsonMenu',
+            'dev.packsmith.mt.InsertUuidMenu',
+            'dev.packsmith.mt.InsertQuotedUuidMenu',
+            'dev.packsmith.mt.ReplaceWithUuidMenu',
+            'dev.packsmith.mt.BedrockIdentifierMenu',
+            'dev.packsmith.mt.InsertNamespaceMenu',
+          ]
+          block='''mtPlugin {\n    pluginID = "dev.packsmith.mt"\n    versionCode = 3\n    versionName = "0.1.2"\n    name = "PackSmith"\n    description = "Bedrock pack tools; compatibility build without PluginUI dialogs"\n    interfaces = [\n''' + ''.join('        "'+x+'",\n' for x in interfaces) + '''    ]\n    pushTarget = "auto"\n}'''
+          p.write_text(s[:start]+block+s[end:])
+          print(p.read_text())
+          PY
+      - name: Build release MTP
+        working-directory: /tmp/mt-demo
+        run: ./gradlew template:packageReleaseMtp --stacktrace
+      - name: Stage artifact
+        shell: bash
+        run: |
+          mkdir -p /tmp/out
+          f=$(find /tmp/mt-demo/template/build/outputs/mt-plugin -type f -name '*.mtp' | head -n1)
+          test -n "$f"
+          cp "$f" /tmp/out/PackSmith-v0.1.2.mtp
+          unzip -l /tmp/out/PackSmith-v0.1.2.mtp
+          unzip -p /tmp/out/PackSmith-v0.1.2.mtp manifest.json
+          sha256sum /tmp/out/PackSmith-v0.1.2.mtp
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PackSmith-v0.1.2
+          path: /tmp/out/PackSmith-v0.1.2.mtp
+          if-no-files-found: error
