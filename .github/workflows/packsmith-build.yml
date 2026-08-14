@@ -21,6 +21,7 @@ jobs:
           rm -rf /tmp/packsmith-src && mkdir -p /tmp/packsmith-src
           cat .packsmith-build/binpart* > /tmp/packsmith-src.zip
           unzip -q /tmp/packsmith-src.zip -d /tmp/packsmith-src
+          if [ -d .packsmith-build/patch/dev ]; then cp -a .packsmith-build/patch/dev/. /tmp/packsmith-src/dev/; fi
           cp -a /tmp/packsmith-src/dev/. /tmp/mt-demo/template/src/main/java/dev/
           python3 - <<'PY2'
           from pathlib import Path
