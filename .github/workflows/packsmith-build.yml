@@ -19,10 +19,7 @@ jobs:
         run: |
           rm -rf /tmp/mt-demo/template/src/main/java/*
           mkdir -p /tmp/mt-demo/template/src/main/java/dev/packsmith/mt
-          rm -rf /tmp/packsmith-src && mkdir -p /tmp/packsmith-src
-          base64 -d .packsmith-build/src.b64 > /tmp/packsmith-src.zip
-          unzip -q /tmp/packsmith-src.zip -d /tmp/packsmith-src
-          cp -a /tmp/packsmith-src/src/dev/packsmith/mt/. /tmp/mt-demo/template/src/main/java/dev/packsmith/mt/
+          cp -a .packsmith-build/src/dev/packsmith/mt/. /tmp/mt-demo/template/src/main/java/dev/packsmith/mt/
           python3 - <<'PY'
           from pathlib import Path
           p=Path('/tmp/mt-demo/template/build.gradle')
