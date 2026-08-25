@@ -62,11 +62,19 @@ public final class WorldManager {
         return !out.trim().isEmpty();
     }
 
-    /**
-     * Mirrors live in internal app storage so the Java LevelDB implementation can open them.
-     * Protected Android/data files are streamed through Shizuku and extracted by run-as,
-     * which gives the mirror the editor app's UID instead of the shell UID.
-     */
+    public static boolean canTargetRunAs(WorldSource source) {
+        try {
+            String probe = "[ -d " + ShizukuShell.quote(source.worldRoot) + " ] && printf BIE_RUNAS_OK";
+            String out = ShizukuShell.exec(
+                    "run-as " + ShizukuShell.quote(source.packageName) +
+                            " sh -c " + ShizukuShell.quote(probe) + " 2>/dev/null || true"
+            );
+            return out.contains("BIE_RUNAS_OK");
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     public static File mirrorDir(Context context, WorldRef world) {
         File base = new File(context.getFilesDir(), "world-mirrors/" + world.source.key);
         return new File(base, encode(world.folder));
@@ -103,58 +111,65 @@ public final class WorldManager {
         return mirror;
     }
 
-    public static File syncWorld(Context context, WorldRef world) throws Exception {
+    /**
+     * True same-folder replacement. This only works when the target package itself permits
+     * run-as, because Android 15 blocks shell UID writes into another app's Android/data tree.
+     */
+    public static File syncWorldInPlace(Context context, WorldRef world) throws Exception {
         if (!validMirror(context, world)) throw new IllegalStateException("Import/open the world mirror first");
+        if (!canTargetRunAs(world.source)) {
+            throw new IllegalStateException("Target package does not permit run-as; use edited .mcworld import instead");
+        }
         if (isSourceRunning(world.source)) {
-            throw new IllegalStateException("Close " + world.source.label + " completely before syncing");
+            throw new IllegalStateException("Close " + world.source.label + " completely before in-place sync");
         }
 
-        File mirror = mirrorDir(context, world);
-        File mirrorDb = new File(mirror, "db");
+        File mirrorDb = new File(mirrorDir(context, world), "db");
         File backup = backupDir(context, world);
         File backupParent = backup.getParentFile();
         if (backupParent != null && !backupParent.mkdirs() && !backupParent.isDirectory()) {
             throw new IllegalStateException("Could not create backup parent directory");
         }
 
-        String pkg = context.getPackageName();
+        String selfPkg = context.getPackageName();
+        String targetPkg = world.source.packageName;
         String destWorld = world.source.worldRoot + "/" + world.folder;
         String destDb = destWorld + "/db";
         String tempDb = destWorld + "/db.__bie_new";
         String oldDb = destWorld + "/db.__bie_old";
 
-        // 1) Back up the destination db into app-private storage via Shizuku -> run-as.
-        String backupExtract = "rm -rf " + ShizukuShell.quote(backup.getAbsolutePath()) +
+        String targetBackupPack = "tar -C " + ShizukuShell.quote(destWorld) + " -cf - db";
+        String selfBackupExtract = "rm -rf " + ShizukuShell.quote(backup.getAbsolutePath()) +
                 "; mkdir -p " + ShizukuShell.quote(backup.getAbsolutePath()) +
                 " && tar -xf - -C " + ShizukuShell.quote(backup.getAbsolutePath());
-        String backupCmd = "world=" + ShizukuShell.quote(destWorld) + "; " +
-                "[ -d \"$world/db\" ] || exit 41; " +
-                "tar -C \"$world\" -cf - db | run-as " + ShizukuShell.quote(pkg) +
-                " sh -c " + ShizukuShell.quote(backupExtract);
+        String backupCmd =
+                "run-as " + ShizukuShell.quote(targetPkg) + " sh -c " + ShizukuShell.quote(targetBackupPack) +
+                " | run-as " + ShizukuShell.quote(selfPkg) + " sh -c " + ShizukuShell.quote(selfBackupExtract);
         ShizukuShell.exec(backupCmd);
         if (!new File(backup, "db").isDirectory()) {
             throw new IllegalStateException("Destination backup failed; sync was not attempted");
         }
 
-        // 2) Stream the app-private mirror db out through run-as into a shell-owned staging db.
-        String runAsPack = "cd " + ShizukuShell.quote(mirrorDb.getAbsolutePath()) + " && tar -cf - .";
-        String stageCmd = "tmp=" + ShizukuShell.quote(tempDb) + "; " +
-                "rm -rf \"$tmp\"; mkdir -p \"$tmp\" || exit 42; " +
-                "run-as " + ShizukuShell.quote(pkg) + " sh -c " + ShizukuShell.quote(runAsPack) +
-                " | tar -xf - -C \"$tmp\"; " +
-                "[ -f \"$tmp/CURRENT\" ] || { rm -rf \"$tmp\"; exit 43; }";
+        String selfPack = "cd " + ShizukuShell.quote(mirrorDb.getAbsolutePath()) + " && tar -cf - .";
+        String targetExtract = "rm -rf " + ShizukuShell.quote(tempDb) +
+                "; mkdir -p " + ShizukuShell.quote(tempDb) +
+                " && tar -xf - -C " + ShizukuShell.quote(tempDb) +
+                " && [ -f " + ShizukuShell.quote(tempDb + "/CURRENT") + " ]";
+        String stageCmd =
+                "run-as " + ShizukuShell.quote(selfPkg) + " sh -c " + ShizukuShell.quote(selfPack) +
+                " | run-as " + ShizukuShell.quote(targetPkg) + " sh -c " + ShizukuShell.quote(targetExtract);
         ShizukuShell.exec(stageCmd);
 
-        // 3) Atomic-ish directory swap. The old db is retained until the new one is in place.
-        String swapCmd = "dst=" + ShizukuShell.quote(destDb) +
+        String swap = "dst=" + ShizukuShell.quote(destDb) +
                 "; tmp=" + ShizukuShell.quote(tempDb) +
                 "; old=" + ShizukuShell.quote(oldDb) + "; " +
                 "[ -d \"$dst\" ] && [ -f \"$tmp/CURRENT\" ] || exit 44; " +
-                "rm -rf \"$old\"; " +
-                "mv \"$dst\" \"$old\" || exit 45; " +
+                "rm -rf \"$old\"; mv \"$dst\" \"$old\" || exit 45; " +
                 "if mv \"$tmp\" \"$dst\"; then rm -rf \"$old\"; " +
                 "else mv \"$old\" \"$dst\"; rm -rf \"$tmp\"; exit 46; fi";
-        ShizukuShell.exec(swapCmd);
+        ShizukuShell.exec(
+                "run-as " + ShizukuShell.quote(targetPkg) + " sh -c " + ShizukuShell.quote(swap)
+        );
 
         return backup;
     }
