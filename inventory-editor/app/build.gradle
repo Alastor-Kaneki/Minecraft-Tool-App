@@ -4,22 +4,37 @@ configurations.configureEach {
     exclude group: 'com.google.guava', module: 'listenablefuture'
 }
 
+def persistentKeystore = file('../.signing/debug.keystore')
+
 android {
     namespace 'dev.alastorkaneki.inventoryeditor'
     compileSdk 35
+
     defaultConfig {
         applicationId 'dev.alastorkaneki.inventoryeditor'
         minSdk 26
         targetSdk 35
-        versionCode 4
+        versionCode 5
         versionName '0.2.0-alpha'
     }
+
+    signingConfigs {
+        persistentDebug {
+            storeFile persistentKeystore
+            storePassword 'android'
+            keyAlias 'bedrock-inventory-editor'
+            keyPassword 'android'
+        }
+    }
+
     buildTypes {
         debug {
             debuggable true
             minifyEnabled false
+            signingConfig signingConfigs.persistentDebug
         }
     }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

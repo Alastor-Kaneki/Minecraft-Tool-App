@@ -2,8 +2,13 @@ package dev.alastorkaneki.inventoryeditor;
 
 import android.app.Activity;
 import android.content.ClipData;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
 
 import androidx.core.content.FileProvider;
 
@@ -13,6 +18,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -33,7 +40,8 @@ public final class WorldExportImporter {
 
         String safe = world.displayName.replaceAll("[^A-Za-z0-9._-]+", "_");
         if (safe.isEmpty()) safe = "Edited_World";
-        File out = new File(exports, safe + "_edited_" + System.currentTimeMillis() + ".mcworld");
+        String fileName = safe + "_edited_" + System.currentTimeMillis() + ".mcworld";
+        File out = new File(exports, fileName);
 
         try (ZipOutputStream zip = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(out)))) {
             zipTree(WorldManager.mirrorDir(activity, world), "", zip);
@@ -42,7 +50,53 @@ public final class WorldExportImporter {
         if (!out.isFile() || out.length() == 0) {
             throw new IOException("Edited .mcworld export failed");
         }
+
+        publishToDownloads(activity, out, fileName);
         return out;
+    }
+
+    private static void publishToDownloads(Activity activity, File source, String fileName) throws IOException {
+        if (Build.VERSION.SDK_INT >= 29) {
+            ContentResolver resolver = activity.getContentResolver();
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, "application/zip");
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/mcworlds");
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+
+            Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) throw new IOException("Could not create Download/mcworlds export");
+            boolean ok = false;
+            try (InputStream in = new BufferedInputStream(new FileInputStream(source));
+                 OutputStream out = new BufferedOutputStream(resolver.openOutputStream(uri, "w"))) {
+                if (out == null) throw new IOException("Could not open Download/mcworlds export");
+                byte[] buffer = new byte[128 * 1024];
+                int n;
+                while ((n = in.read(buffer)) >= 0) out.write(buffer, 0, n);
+                out.flush();
+                ok = true;
+            } finally {
+                if (ok) {
+                    ContentValues ready = new ContentValues();
+                    ready.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                    resolver.update(uri, ready, null, null);
+                } else {
+                    resolver.delete(uri, null, null);
+                }
+            }
+            return;
+        }
+
+        // Legacy Android fallback. Modern Android uses MediaStore above and needs no broad storage permission.
+        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "mcworlds");
+        if (!dir.mkdirs() && !dir.isDirectory()) throw new IOException("Could not create Download/mcworlds");
+        File dest = new File(dir, fileName);
+        try (InputStream in = new BufferedInputStream(new FileInputStream(source));
+             OutputStream out = new BufferedOutputStream(new FileOutputStream(dest))) {
+            byte[] buffer = new byte[128 * 1024];
+            int n;
+            while ((n = in.read(buffer)) >= 0) out.write(buffer, 0, n);
+        }
     }
 
     private static void zipTree(File file, String relative, ZipOutputStream zip) throws IOException {

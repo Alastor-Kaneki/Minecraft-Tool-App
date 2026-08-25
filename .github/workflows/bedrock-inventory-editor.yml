@@ -22,10 +22,29 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - uses: actions/cache@v4
+
+      - name: Restore signing keystore
+        uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: bedrock-inventory-editor-debug-keystore-v1
+          path: inventory-editor/.signing/debug.keystore
+          key: bedrock-inventory-editor-signing-v1
+
+      - name: Create signing keystore if missing
+        run: |
+          mkdir -p .signing
+          if [ ! -f .signing/debug.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore .signing/debug.keystore \
+              -storepass android \
+              -alias bedrock-inventory-editor \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname 'CN=Bedrock Inventory Editor,O=Alastor Kaneki,C=US'
+          fi
+          keytool -list -keystore .signing/debug.keystore -storepass android -alias bedrock-inventory-editor
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
@@ -33,5 +52,5 @@ jobs:
       - run: gradle :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: Bedrock-Inventory-Editor-0.2.0-alpha
+          name: Bedrock-Inventory-Editor-0.2.0-alpha-storage-signing
           path: inventory-editor/app/build/outputs/apk/debug/app-debug.apk

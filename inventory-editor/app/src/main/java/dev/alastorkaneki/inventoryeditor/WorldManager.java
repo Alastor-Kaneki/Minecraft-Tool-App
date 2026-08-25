@@ -4,6 +4,9 @@ import android.content.Context;
 import android.util.Base64;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -75,29 +78,63 @@ public final class WorldManager {
         }
     }
 
+    /** User-visible app-specific external storage: /storage/emulated/0/Android/data/<package>/files */
+    public static File visibleRoot(Context context) {
+        File external = context.getExternalFilesDir(null);
+        return external != null ? external : context.getFilesDir();
+    }
+
     public static File mirrorDir(Context context, WorldRef world) {
+        File base = new File(visibleRoot(context), "world-mirrors/" + world.source.key);
+        return new File(base, encode(world.folder));
+    }
+
+    private static File legacyMirrorDir(Context context, WorldRef world) {
         File base = new File(context.getFilesDir(), "world-mirrors/" + world.source.key);
         return new File(base, encode(world.folder));
     }
 
-    public static boolean validMirror(Context context, WorldRef world) {
-        File dir = mirrorDir(context, world);
+    private static boolean validMirrorDir(File dir) {
         return new File(dir, "level.dat").isFile() && new File(dir, "db").isDirectory();
     }
 
+    public static boolean validMirror(Context context, WorldRef world) {
+        return validMirrorDir(mirrorDir(context, world));
+    }
+
     public static File importWorld(Context context, WorldRef world) throws Exception {
+        File mirror = mirrorDir(context, world);
+
+        // Preserve an edited mirror from older builds before touching the source world.
+        if (!validMirrorDir(mirror)) {
+            File legacy = legacyMirrorDir(context, world);
+            if (validMirrorDir(legacy)) {
+                deleteTree(mirror);
+                copyTree(legacy, mirror);
+                if (!validMirrorDir(mirror)) {
+                    deleteTree(mirror);
+                    throw new IllegalStateException("Legacy mirror migration into Android/data was incomplete");
+                }
+                deleteTree(legacy);
+                return mirror;
+            }
+        }
+
         if (isSourceRunning(world.source)) {
             throw new IllegalStateException("Close " + world.source.label + " completely before importing this world");
         }
 
-        File mirror = mirrorDir(context, world);
         String src = world.source.worldRoot + "/" + world.folder;
         String pkg = context.getPackageName();
-        String dst = mirror.getAbsolutePath();
 
-        String runAsExtract = "rm -rf " + ShizukuShell.quote(dst) +
-                "; mkdir -p " + ShizukuShell.quote(dst) +
-                " && tar -xf - -C " + ShizukuShell.quote(dst);
+        // Keep the proven Shizuku -> run-as bridge on private storage, then let the app itself
+        // copy the finished mirror into its Android/data/files tree. This avoids shell ownership
+        // and Android 15 FUSE/SELinux surprises while making the actual working mirror visible.
+        File staging = new File(context.getFilesDir(), "mirror-import-staging/" + world.source.key + "/" + encode(world.folder));
+        String stage = staging.getAbsolutePath();
+        String runAsExtract = "rm -rf " + ShizukuShell.quote(stage) +
+                "; mkdir -p " + ShizukuShell.quote(stage) +
+                " && tar -xf - -C " + ShizukuShell.quote(stage);
 
         String cmd = "src=" + ShizukuShell.quote(src) + "; " +
                 "[ -f \"$src/level.dat\" ] && [ -d \"$src/db\" ] || exit 31; " +
@@ -105,8 +142,16 @@ public final class WorldManager {
                 " sh -c " + ShizukuShell.quote(runAsExtract);
 
         ShizukuShell.exec(cmd);
-        if (!validMirror(context, world)) {
-            throw new IllegalStateException("Imported mirror is incomplete after run-as transfer");
+        if (!validMirrorDir(staging)) {
+            throw new IllegalStateException("Imported staging mirror is incomplete after run-as transfer");
+        }
+
+        deleteTree(mirror);
+        copyTree(staging, mirror);
+        deleteTree(staging);
+
+        if (!validMirrorDir(mirror)) {
+            throw new IllegalStateException("Android/data mirror is incomplete after app-owned copy");
         }
         return mirror;
     }
@@ -138,19 +183,31 @@ public final class WorldManager {
         String tempDb = destWorld + "/db.__bie_new";
         String oldDb = destWorld + "/db.__bie_old";
 
+        File privateBackupStage = new File(context.getFilesDir(), "sync-backup-staging/" + world.source.key + "/" + encode(world.folder));
+        deleteTree(privateBackupStage);
+
         String targetBackupPack = "tar -C " + ShizukuShell.quote(destWorld) + " -cf - db";
-        String selfBackupExtract = "rm -rf " + ShizukuShell.quote(backup.getAbsolutePath()) +
-                "; mkdir -p " + ShizukuShell.quote(backup.getAbsolutePath()) +
-                " && tar -xf - -C " + ShizukuShell.quote(backup.getAbsolutePath());
+        String selfBackupExtract = "rm -rf " + ShizukuShell.quote(privateBackupStage.getAbsolutePath()) +
+                "; mkdir -p " + ShizukuShell.quote(privateBackupStage.getAbsolutePath()) +
+                " && tar -xf - -C " + ShizukuShell.quote(privateBackupStage.getAbsolutePath());
         String backupCmd =
                 "run-as " + ShizukuShell.quote(targetPkg) + " sh -c " + ShizukuShell.quote(targetBackupPack) +
                 " | run-as " + ShizukuShell.quote(selfPkg) + " sh -c " + ShizukuShell.quote(selfBackupExtract);
         ShizukuShell.exec(backupCmd);
-        if (!new File(backup, "db").isDirectory()) {
+        if (!new File(privateBackupStage, "db").isDirectory()) {
             throw new IllegalStateException("Destination backup failed; sync was not attempted");
         }
+        deleteTree(backup);
+        copyTree(privateBackupStage, backup);
+        deleteTree(privateBackupStage);
 
-        String selfPack = "cd " + ShizukuShell.quote(mirrorDb.getAbsolutePath()) + " && tar -cf - .";
+        // run-as may not reliably traverse app-specific external storage on every Android build,
+        // so stage the edited DB privately before streaming it to the target package.
+        File privateDbStage = new File(context.getFilesDir(), "sync-db-staging/" + world.source.key + "/" + encode(world.folder));
+        deleteTree(privateDbStage);
+        copyTree(mirrorDb, privateDbStage);
+
+        String selfPack = "cd " + ShizukuShell.quote(privateDbStage.getAbsolutePath()) + " && tar -cf - .";
         String targetExtract = "rm -rf " + ShizukuShell.quote(tempDb) +
                 "; mkdir -p " + ShizukuShell.quote(tempDb) +
                 " && tar -xf - -C " + ShizukuShell.quote(tempDb) +
@@ -159,6 +216,7 @@ public final class WorldManager {
                 "run-as " + ShizukuShell.quote(selfPkg) + " sh -c " + ShizukuShell.quote(selfPack) +
                 " | run-as " + ShizukuShell.quote(targetPkg) + " sh -c " + ShizukuShell.quote(targetExtract);
         ShizukuShell.exec(stageCmd);
+        deleteTree(privateDbStage);
 
         String swap = "dst=" + ShizukuShell.quote(destDb) +
                 "; tmp=" + ShizukuShell.quote(tempDb) +
@@ -176,8 +234,35 @@ public final class WorldManager {
 
     private static File backupDir(Context context, WorldRef world) {
         String stamp = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date());
-        File root = new File(context.getFilesDir(), "sync-backups/" + world.source.key + "/" + encode(world.folder));
+        File root = new File(visibleRoot(context), "backups/sync/" + world.source.key + "/" + encode(world.folder));
         return new File(root, stamp);
+    }
+
+    private static void copyTree(File src, File dst) throws IOException {
+        if (src.isDirectory()) {
+            if (!dst.mkdirs() && !dst.isDirectory()) throw new IOException("Could not create " + dst.getAbsolutePath());
+            File[] children = src.listFiles();
+            if (children == null) return;
+            for (File child : children) copyTree(child, new File(dst, child.getName()));
+            return;
+        }
+        File parent = dst.getParentFile();
+        if (parent != null && !parent.mkdirs() && !parent.isDirectory()) throw new IOException("Could not create " + parent.getAbsolutePath());
+        try (FileInputStream in = new FileInputStream(src); FileOutputStream out = new FileOutputStream(dst)) {
+            byte[] buffer = new byte[128 * 1024];
+            int n;
+            while ((n = in.read(buffer)) >= 0) out.write(buffer, 0, n);
+        }
+        dst.setLastModified(src.lastModified());
+    }
+
+    private static void deleteTree(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) for (File child : children) deleteTree(child);
+        }
+        try { file.delete(); } catch (Throwable ignored) {}
     }
 
     private static String encode(String value) {
