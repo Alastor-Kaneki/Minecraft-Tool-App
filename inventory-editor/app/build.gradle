@@ -7,22 +7,19 @@ configurations.configureEach {
 android {
     namespace 'dev.alastorkaneki.inventoryeditor'
     compileSdk 35
-
     defaultConfig {
         applicationId 'dev.alastorkaneki.inventoryeditor'
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName '0.1.2-alpha'
+        versionCode 4
+        versionName '0.2.0-alpha'
     }
-
     buildTypes {
         debug {
             debuggable true
             minifyEnabled false
         }
     }
-
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17

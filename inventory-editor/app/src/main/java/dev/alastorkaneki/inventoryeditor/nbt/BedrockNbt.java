@@ -9,7 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Minimal lossless little-endian NBT reader/writer for Bedrock world records. */
+/** Lossless little-endian NBT reader/writer plus safe inspection/copy helpers for Bedrock records. */
 public final class BedrockNbt {
     public static final byte END=0, BYTE=1, SHORT=2, INT=3, LONG=4, FLOAT=5, DOUBLE=6, BYTE_ARRAY=7, STRING=8, LIST=9, COMPOUND=10, INT_ARRAY=11, LONG_ARRAY=12;
     private BedrockNbt() {}
@@ -20,13 +20,15 @@ public final class BedrockNbt {
         public int asInt(int def){ if(value instanceof Number)return ((Number)value).intValue(); return def; }
         public long asLong(long def){ if(value instanceof Number)return ((Number)value).longValue(); return def; }
         public String asString(String def){ return value instanceof String ? (String)value : def; }
-        @SuppressWarnings("unchecked") public Compound compound(){ return type==COMPOUND ? (Compound)value : null; }
-        @SuppressWarnings("unchecked") public ListTag list(){ return type==LIST ? (ListTag)value : null; }
+        public Compound compound(){ return type==COMPOUND ? (Compound)value : null; }
+        public ListTag list(){ return type==LIST ? (ListTag)value : null; }
     }
     public static final class Compound extends LinkedHashMap<String,Tag> {
         public Tag tag(String n){return get(n);} public Compound compound(String n){Tag t=get(n);return t==null?null:t.compound();} public ListTag list(String n){Tag t=get(n);return t==null?null:t.list();}
         public String string(String n,String d){Tag t=get(n);return t==null?d:t.asString(d);} public int number(String n,int d){Tag t=get(n);return t==null?d:t.asInt(d);}
-        public void putByte(String n,int v){put(n,new Tag(BYTE,(byte)v));} public void putShort(String n,int v){put(n,new Tag(SHORT,(short)v));} public void putInt(String n,int v){put(n,new Tag(INT,v));} public void putString(String n,String v){put(n,new Tag(STRING,v==null?"":v));}
+        public void putByte(String n,int v){put(n,new Tag(BYTE,(byte)v));} public void putShort(String n,int v){put(n,new Tag(SHORT,(short)v));} public void putInt(String n,int v){put(n,new Tag(INT,v));}
+        public void putLong(String n,long v){put(n,new Tag(LONG,v));} public void putFloat(String n,float v){put(n,new Tag(FLOAT,v));} public void putDouble(String n,double v){put(n,new Tag(DOUBLE,v));}
+        public void putString(String n,String v){put(n,new Tag(STRING,v==null?"":v));}
     }
     public static final class ListTag {
         public byte elementType; public final ArrayList<Tag> values=new ArrayList<>();
@@ -39,6 +41,68 @@ public final class BedrockNbt {
     public static byte[] write(Root root) throws IOException {
         Out out=new Out(); out.u8(root.tag.type); out.str(root.name==null?"":root.name); writePayload(out,root.tag,0); return out.bytes();
     }
+
+    public static Tag deepCopy(Tag tag) {
+        if(tag==null)return null;
+        Object v=tag.value;
+        switch(tag.type){
+            case BYTE_ARRAY: v=((byte[])v).clone(); break;
+            case INT_ARRAY: v=((int[])v).clone(); break;
+            case LONG_ARRAY: v=((long[])v).clone(); break;
+            case LIST:{
+                ListTag src=(ListTag)v,dst=new ListTag(src.elementType);
+                for(Tag t:src.values)dst.values.add(deepCopy(t));
+                v=dst; break;
+            }
+            case COMPOUND:{
+                Compound src=(Compound)v,dst=new Compound();
+                for(Map.Entry<String,Tag> e:src.entrySet())dst.put(e.getKey(),deepCopy(e.getValue()));
+                v=dst; break;
+            }
+            default: break;
+        }
+        return new Tag(tag.type,v);
+    }
+
+    public static Compound deepCopyCompound(Compound c){ return c==null?null:deepCopy(new Tag(COMPOUND,c)).compound(); }
+
+    public static String pretty(Root root) {
+        StringBuilder b=new StringBuilder();
+        b.append(typeName(root.tag.type)).append('(').append(root.name==null?"":root.name).append(")\n");
+        prettyTag(b,root.tag,0);
+        return b.toString();
+    }
+
+    private static void prettyTag(StringBuilder b,Tag t,int depth){
+        if(depth>24){indent(b,depth).append("…\n");return;}
+        if(t==null){b.append("null\n");return;}
+        switch(t.type){
+            case COMPOUND:{
+                Compound c=t.compound(); b.append("{\n");
+                for(Map.Entry<String,Tag> e:c.entrySet()){
+                    indent(b,depth+1).append(e.getKey()).append(": ").append(typeName(e.getValue().type)).append(' ');
+                    prettyTag(b,e.getValue(),depth+1);
+                }
+                indent(b,depth).append("}\n"); break;
+            }
+            case LIST:{
+                ListTag l=t.list(); b.append('[').append(l.size()).append(" × ").append(typeName(l.elementType)).append("]\n");
+                int max=Math.min(l.size(),128);
+                for(int i=0;i<max;i++){indent(b,depth+1).append('[').append(i).append("] ");prettyTag(b,l.get(i),depth+1);}
+                if(l.size()>max)indent(b,depth+1).append("… ").append(l.size()-max).append(" more\n");
+                break;
+            }
+            case BYTE_ARRAY:b.append("<byte[").append(((byte[])t.value).length).append("]>\n");break;
+            case INT_ARRAY:b.append("<int[").append(((int[])t.value).length).append("]>\n");break;
+            case LONG_ARRAY:b.append("<long[").append(((long[])t.value).length).append("]>\n");break;
+            case STRING:b.append('"').append(escape(String.valueOf(t.value))).append("\"\n");break;
+            default:b.append(String.valueOf(t.value)).append('\n');
+        }
+    }
+
+    private static StringBuilder indent(StringBuilder b,int n){for(int i=0;i<n;i++)b.append("  ");return b;}
+    private static String escape(String s){return s.replace("\\","\\\\").replace("\n","\\n").replace("\r","\\r").replace("\t","\\t").replace("\"","\\\"");}
+    public static String typeName(byte t){switch(t){case END:return"END";case BYTE:return"BYTE";case SHORT:return"SHORT";case INT:return"INT";case LONG:return"LONG";case FLOAT:return"FLOAT";case DOUBLE:return"DOUBLE";case BYTE_ARRAY:return"BYTE_ARRAY";case STRING:return"STRING";case LIST:return"LIST";case COMPOUND:return"COMPOUND";case INT_ARRAY:return"INT_ARRAY";case LONG_ARRAY:return"LONG_ARRAY";default:return"TYPE_"+t;}}
 
     private static Object readPayload(In in,byte type,int depth) throws IOException {
         if(depth>128)throw new IOException("NBT nesting too deep");
