@@ -1,5 +1,9 @@
 plugins { id 'com.android.application' }
 
+configurations.configureEach {
+    exclude group: 'com.google.guava', module: 'listenablefuture'
+}
+
 android {
     namespace 'dev.alastorkaneki.inventoryeditor'
     compileSdk 35
